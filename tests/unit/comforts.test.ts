@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Discovery, PREVIEW_DELAY, Tip, firstLine, previewHtml, type DiscoveryStore, type SummarySource } from '../../src/comforts';
-import type { StarNode } from '../../src/engine';
+import { Discovery, PREVIEW_DELAY, StarCursor, Tip, announce, firstLine, nextStar, previewHtml, type DiscoveryStore, type StarReach, type SummarySource } from '../../src/comforts';
+import type { Con, StarNode } from '../../src/engine';
 import type { ArticleSummary, Constellation, Star } from '../../src/types';
 
 function star(title: string, subject: string): Star {
@@ -199,5 +199,81 @@ describe('Tip', () => {
     expect(el.style.left).toBe('590px');
     expect(el.style.top).toBe('510px');
     expect(el.innerHTML).toContain('<b>Jazz</b>');
+  });
+});
+
+describe('keyboard travel', () => {
+  const at = (title: string, sx: number, sy: number, on = true): StarNode => ({ title, subject: 'Music', rank: 3, sx, sy, on, a: 1 }) as StarNode;
+  const east = at('East', 100, 5);
+  const farEast = at('Far east', 220, 0);
+  const north = at('North', 10, -80);
+  const northEast = at('North east', 60, -70);
+  const hidden = at('Hidden', 40, 0, false);
+  const nodes = [east, farEast, north, northEast, hidden];
+  const origin = { x: 0, y: 0 };
+
+  function setup(): { cursor: StarCursor; map: StarReach & { current: Con | null; trail: string[] }; calls: string[] } {
+    const calls: string[] = [];
+    const map = {
+      current: { title: 'Centre', cx: 0, cy: 0, nodes } as Con as Con | null,
+      trail: ['Start', 'Centre'],
+      highlight: (title: string | null) => calls.push('ring ' + title) > 0,
+      zoomBy: (f: number) => void calls.push('zoom ' + f.toFixed(2)),
+      fit: () => void calls.push('fit'),
+    };
+    const cursor = new StarCursor({ map, go: (title) => void calls.push('go ' + title) }, (text) => void calls.push('say ' + text));
+    return { cursor, map, calls };
+  }
+
+  it('picks the nearest star in the arrow direction and skips hidden ones', () => {
+    expect(nextStar(nodes, origin, 'right')).toBe(east);
+    expect(nextStar(nodes, origin, 'up')).toBe(north);
+    expect(nextStar(nodes, origin, 'left')).toBeNull();
+    expect(nextStar(nodes, origin, 'down')).toBeNull();
+    expect(nextStar(nodes, { x: east.sx, y: east.sy }, 'right', east)).toBe(farEast);
+    expect(nextStar(nodes, { x: east.sx, y: east.sy }, 'up', east)).toBe(northEast);
+  });
+
+  it('walks from the centre, rings the star and says its name', () => {
+    const { cursor, calls } = setup();
+    expect(cursor.key('ArrowRight')).toBe(true);
+    expect(cursor.selected).toBe(east);
+    expect(cursor.key('ArrowRight')).toBe(true);
+    expect(cursor.selected).toBe(farEast);
+    expect(cursor.key('ArrowRight')).toBe(true); // nothing further: stay put
+    expect(cursor.selected).toBe(farEast);
+    expect(calls).toEqual(['ring East', 'say ' + announce(east), 'ring Far east', 'say ' + announce(farEast)]);
+    expect(announce(east)).toBe('East, Music, rank 3. Press Enter to travel there.');
+  });
+
+  it('travels on Enter, lets go on Escape and goes back on Backspace', () => {
+    const { cursor, calls } = setup();
+    expect(cursor.key('Enter')).toBe(false);
+    expect(cursor.key('Escape')).toBe(false);
+    cursor.key('ArrowUp');
+    expect(cursor.key('Escape')).toBe(true);
+    expect(cursor.selected).toBeNull();
+    cursor.key('ArrowUp');
+    expect(cursor.key('Enter')).toBe(true);
+    expect(cursor.selected).toBeNull();
+    expect(cursor.key('Backspace')).toBe(true);
+    expect(calls.filter((c) => !c.startsWith('say'))).toEqual(['ring North', 'ring null', 'ring North', 'ring null', 'go North', 'go Start']);
+  });
+
+  it('forgets its star when the map moves on, and zooms', () => {
+    const { cursor, map, calls } = setup();
+    cursor.key('ArrowRight');
+    map.current = { title: 'Next', cx: 0, cy: 0, nodes: [] as StarNode[] } as Con;
+    expect(cursor.selected).toBeNull();
+    expect(cursor.key('Enter')).toBe(false);
+    map.trail = ['Next'];
+    expect(cursor.key('Backspace')).toBe(false);
+    expect(cursor.key('+')).toBe(true);
+    expect(cursor.key('-')).toBe(true);
+    expect(cursor.key('0')).toBe(true);
+    expect(cursor.key('x')).toBe(false);
+    expect(calls.slice(2)).toEqual(['zoom 1.40', 'zoom 0.71', 'fit']);
+    map.current = null;
+    expect(cursor.key('ArrowLeft')).toBe(false);
   });
 });
