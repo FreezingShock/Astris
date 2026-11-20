@@ -4,7 +4,7 @@ import { replay, subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
 import { Discovery, Share, Tip, firstLine, initKeyboard } from '../comforts';
 import { Connect, connectHtml, type ConnectState } from './connect';
-import { dailyPair, saveDaily } from './daily';
+import { dailyPair, recent, saveDaily, shareText, streak } from './daily';
 import { savedLevel, saveLevel, LEVELS, type Level } from './difficulty';
 import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
 import { UNREACHABLE_NOTE, failureOf } from './failure';
@@ -168,7 +168,7 @@ export class Play {
   }
 
   /** Start a race between two articles. Par is searched for in the background unless it is already known. */
-  async startRace(start: string, target: string, knownPar?: number, day?: number, level?: Level): Promise<void> {
+  async startRace(start: string, target: string, knownPar?: number, day?: number, hard = false, level?: Level): Promise<void> {
     const seq = ++this.raceSeq;
     this.picking = false;
     this.setMode(day === undefined ? 'race' : 'daily');
@@ -179,7 +179,7 @@ export class Play {
       return;
     }
     // The provider follows redirects, so race on the titles it actually uses.
-    const race = beginRace(data.center.title, target, knownPar ?? null, performance.now(), day);
+    const race = beginRace(data.center.title, target, knownPar ?? null, performance.now(), day, hard);
     if (level) race.level = level;
     this.race = race;
     this.engine.markerTitle = target;
@@ -203,6 +203,7 @@ export class Play {
     race.par = found;
     this.hud();
     // The rating needs the target's links, one more article to ask for, so it follows the par on the card.
+    if (race.day !== undefined) return;
     const rated = await levelOf(this.provider, race.target, found).catch(() => undefined);
     if (this.race !== race || !rated) return;
     race.level = rated;
@@ -217,9 +218,9 @@ export class Play {
   }
 
   /** Start today's race: one pair a day, the same for every visitor. */
-  async startDaily(): Promise<void> {
-    const pair = dailyPair();
-    await this.startRace(pair.start, pair.target, undefined, pair.day);
+  async startDaily(hard = false): Promise<void> {
+    const pair = dailyPair(undefined, hard);
+    await this.startRace(pair.start, pair.target, undefined, pair.day, hard);
   }
 
   /** A random pair: the one picked ahead if there is one, otherwise a fresh pick. */
@@ -270,7 +271,7 @@ export class Play {
     this.hud();
     try {
       const pair = await this.pair();
-      if (seq === this.raceSeq) await this.startRace(pair.start, pair.target, pair.par, undefined, pair.level);
+      if (seq === this.raceSeq) await this.startRace(pair.start, pair.target, pair.par, undefined, false, pair.level);
     } catch {
       if (seq !== this.raceSeq) return;
       this.setMode('explore');
@@ -278,11 +279,23 @@ export class Play {
     }
   }
 
+  /** Copy the finished daily's result grid, which names neither article, to the clipboard. */
+  async shareDaily(): Promise<void> {
+    const race = this.race;
+    if (!race?.done || race.day === undefined || !race.best) return;
+    const text = shareText(race.day, race.hard === true, race.best, location.origin + '/play?daily=' + (race.hard ? 'hard' : '1'));
+    const copied = await navigator.clipboard.writeText(text).then(
+      () => true,
+      () => false,
+    );
+    this.toast(copied ? 'Result copied. Paste it anywhere.' : 'Could not reach the clipboard.');
+  }
+
   /** Run the current race again from its start. */
   async retryRace(): Promise<void> {
     const race = this.race;
     if (!race) return this.newRace();
-    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, race.day, race.level);
+    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, race.day, race.hard, race.level);
   }
 
   /** Drift: the map travels to a neighbouring article every few seconds until the reader acts. */
@@ -391,7 +404,12 @@ export class Play {
     if (!race || race.done) return;
     if (stepRace(race, title, now)) {
       this.engine.markerTitle = null;
-      if (race.day !== undefined) race.best = saveDaily(race.day, { clicks: race.clicks, time: race.time });
+      if (race.day !== undefined) {
+        const hard = race.hard === true;
+        race.best = saveDaily(race.day, { clicks: race.clicks, time: race.time, ...(race.par !== null && race.par > 0 ? { par: race.par } : {}) }, undefined, hard);
+        race.streak = streak(race.day);
+        race.calendar = recent(race.day);
+      }
       this.prepare();
     }
     this.hud();
@@ -581,6 +599,8 @@ export class Play {
       else if (id === 'csurprise') void this.surprisePair();
       else if (id === 'again') void this.newRace();
       else if (id === 'retry') void this.retryRace();
+      else if (id === 'dtoggle') void this.startDaily(!this.race?.hard);
+      else if (id === 'share') void this.shareDaily();
       else if (id === 'quit') this.setMode('explore');
     });
 

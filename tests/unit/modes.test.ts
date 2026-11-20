@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SampleProvider } from '../../src/data';
 import { Connect, chainBetween, connectHtml, type ConnectHost, type ConnectState } from '../../src/modes/connect';
-import { DAILY_POOL, bestDaily, dailyPair, dayLabel, dayOf, saveDaily } from '../../src/modes/daily';
+import { DAILY_POOL, bestDaily, dailyPair, dayLabel, dayOf, played, recent, resultGrid, saveDaily, shareText, streak } from '../../src/modes/daily';
 import { failureOf } from '../../src/modes/failure';
 import { Graph, graphOf, route } from '../../src/modes/graph';
 import { closest, suggestNext } from '../../src/modes/panel';
@@ -262,6 +262,63 @@ describe('the daily race', () => {
     };
     expect(saveDaily(day, { clicks: 3, time: 1 }, blocked)).toEqual({ clicks: 3, time: 1 });
     expect(saveDaily(day, { clicks: 3, time: 1 }, undefined)).toEqual({ clicks: 3, time: 1 });
+  });
+
+  it('has a hard pair that is stable, differs from the normal one and joins two subjects', () => {
+    const group = (t: string): number => DAILY_POOL.findIndex((g) => g.includes(t));
+    expect(dailyPair(day, true)).toEqual(dailyPair(day, true));
+    for (let i = 0; i < 400; i++) {
+      const normal = dailyPair(day + i);
+      const hard = dailyPair(day + i, true);
+      expect(hard.hard).toBe(true);
+      expect(hard.start + '|' + hard.target).not.toBe(normal.start + '|' + normal.target);
+      expect(group(hard.start)).not.toBe(group(hard.target));
+    }
+  });
+
+  it('keeps the two versions apart in storage and counts either for the streak and calendar', () => {
+    const data = new Map<string, string>();
+    const store = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v) };
+    expect(streak(day, store)).toBe(0);
+    saveDaily(day - 1, { clicks: 4, time: 1, par: 3 }, store);
+    saveDaily(day - 2, { clicks: 4, time: 1 }, store, true);
+    expect(bestDaily(day - 2, store)).toBeNull();
+    expect(bestDaily(day - 1, store)).toEqual({ clicks: 4, time: 1, par: 3 });
+    expect(played(day - 2, store)).toBe(true);
+    expect(streak(day, store)).toBe(2); // today not finished yet: counts back from yesterday
+    saveDaily(day, { clicks: 3, time: 1 }, store);
+    expect(streak(day, store)).toBe(3);
+    saveDaily(day - 4, { clicks: 3, time: 1 }, store);
+    expect(streak(day, store)).toBe(3); // a gap on day - 3 ends the run
+    const cal = recent(day, 7, store);
+    expect(cal).toEqual([false, false, true, false, true, true, true]);
+    expect(streak(day, undefined)).toBe(0);
+  });
+
+  it('builds a share text with a result grid and no article names', () => {
+    expect(resultGrid(1, 3)).toBe('⭐');
+    expect(resultGrid(3, 3)).toBe('🟦🟦⭐');
+    expect(resultGrid(5, 3)).toBe('🟦🟦🟧🟧⭐');
+    expect(resultGrid(2, 4)).toBe('🟩⭐');
+    expect(resultGrid(4, undefined)).toBe('🟦🟦🟦⭐');
+    expect(resultGrid(30, 3)).toContain('…⭐');
+    const text = shareText(day, true, { clicks: 3, time: 61000, par: 3 }, 'https://astris.example/play?daily=hard');
+    expect(text).toBe('Astris Daily · 20 Nov (hard)\n3 clicks · par 3 · 1:01\n🟦🟦⭐\nhttps://astris.example/play?daily=hard');
+  });
+
+  it('shows the streak, calendar and buttons on a finished daily, and hides the hint on the hard one', () => {
+    const race = beginRace('A', 'Z', 3, 0, day, true);
+    race.hint = 'A secret clue';
+    expect(hudHtml(race)).not.toContain('secret clue');
+    expect(hudHtml(race)).toContain('· hard');
+    expect(hudHtml(race)).toContain('Normal version');
+    stepRace(race, 'Z', 5000);
+    race.streak = 2;
+    race.calendar = [false, true, true];
+    const html = hudHtml(race);
+    expect(html).toContain('2 days in a row');
+    expect(html).toContain("id='share'");
+    expect(html).toContain('2 of the last 3 days finished');
   });
 
   it('labels its status card and shows the best finish', () => {

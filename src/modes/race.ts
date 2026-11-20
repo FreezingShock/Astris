@@ -35,12 +35,18 @@ export interface Race {
   day?: number;
   /** The reader's best finish for that day, once they have one. */
   best?: DailyResult;
+  /** Set for the hard daily: the hint about the target stays hidden. */
+  hard?: boolean;
+  /** Days in a row finished, and the last four weeks, once the daily is done. */
+  streak?: number;
+  calendar?: boolean[];
 }
 
 /** A fresh race, with the clock started. */
-export function beginRace(start: string, target: string, par: number | null, now: number, day?: number): Race {
+export function beginRace(start: string, target: string, par: number | null, now: number, day?: number, hard = false): Race {
   const race: Race = { start, target, clicks: 0, par, t0: now, time: 0, done: false };
   if (day !== undefined) race.day = day;
+  if (hard) race.hard = true;
   return race;
 }
 
@@ -127,7 +133,7 @@ export async function randomPair(provider: DataProvider, rand: () => number = Ma
     const short = await route(graphOf(provider), start, target, { maxDepth: path.length - 2, budget: CHECK_BUDGET, beam: PAR_BEAM });
     const found = short ? short.length - 1 : path.length - 1;
     const links = await linksOf(provider, target);
-    const pair = { start, target, par: found, level: rate(found, links), off: miss(level, found, links) + (level !== 'easy' && found < 3 ? 1 : 0) };
+    const pair = { start, target, par: found, level: rate(found, links), off: miss(level, found, links) + (level !== 'easy' && found < 3 ? 2 : 0) };
     if (pair.off === 0) return pair;
     if (!best || pair.off < best.off || (pair.off === best.off && level !== 'easy' && pair.par > best.par)) best = pair;
   }
@@ -156,7 +162,7 @@ const button = (id: string, text: string): string => "<button class='lk' type='b
 /** The status card at the top of the map while a race runs. */
 export function hudHtml(race: Race, level: Level = DEFAULT_LEVEL): string {
   const daily = race.day !== undefined;
-  const day = race.day === undefined ? '' : "<div class='day'>Daily constellation · " + esc(dayLabel(race.day)) + '</div>';
+  const day = race.day === undefined ? '' : "<div class='day'>Daily constellation · " + esc(dayLabel(race.day)) + (race.hard ? ' · hard' : '') + '</div>';
   if (!race.done)
     return (
       day +
@@ -165,13 +171,13 @@ export function hudHtml(race: Race, level: Level = DEFAULT_LEVEL): string {
       ' → <em>' +
       esc(race.target) +
       '</em></div>' +
-      (race.hint ? "<div class='hint'>" + esc(race.hint) + '</div>' : '') +
+      (race.hint && !race.hard ? "<div class='hint'>" + esc(race.hint) + '</div>' : '') +
       "<div class='stats'><span id='rc'>" +
       race.clicks +
       " clicks</span><span id='rt'>00:00</span><span id='rp'>" +
       parText(race) +
       '</span>' +
-      (daily ? button('retry', 'Restart') : button('again', 'New race')) +
+      (daily ? button('retry', 'Restart') + button('dtoggle', race.hard ? 'Normal version' : 'Hard version') : button('again', 'New race')) +
       button('quit', 'Quit') +
       '</div>' +
       (daily ? '' : "<div class='stats'>" + levelPickerHtml(level) + '</div>')
@@ -192,10 +198,32 @@ export function hudHtml(race: Race, level: Level = DEFAULT_LEVEL): string {
     parText(race) +
     '</span>' +
     best +
+    (daily ? dailyExtras(race) : '') +
     button('retry', 'Same race') +
     button('again', daily ? 'Random race' : 'New race') +
     button('quit', 'Keep exploring') +
     '</div>' +
     (daily ? '' : "<div class='stats'>" + levelPickerHtml(level) + '</div>')
+  );
+}
+
+/** After a daily finish: the streak, the last four weeks as a calendar, and the share and hard buttons. */
+function dailyExtras(race: Race): string {
+  const days = race.calendar ?? [];
+  const cells = days.map((on, i) => "<i class='" + (on ? 'on' : '') + (i === days.length - 1 ? ' today' : '') + "'></i>").join('');
+  const n = race.streak ?? 0;
+  return (
+    "<div class='streak'><span>" +
+    n +
+    (n === 1 ? ' day' : ' days') +
+    " in a row</span><span class='cal' role='img' aria-label='" +
+    days.filter(Boolean).length +
+    ' of the last ' +
+    days.length +
+    " days finished'>" +
+    cells +
+    '</span></div>' +
+    button('share', 'Share result') +
+    button('dtoggle', race.hard ? 'Normal version' : 'Hard version')
   );
 }
