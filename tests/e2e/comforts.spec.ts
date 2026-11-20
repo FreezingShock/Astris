@@ -54,12 +54,13 @@ test('the address bar follows the map and the Share button copies a link that re
   await page.locator('#gq').fill('jaz');
   await expect(page.locator('#gsugg li').first()).toContainText('Jazz');
   await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/\/play\?a=Jazz$/);
+  // After a first hop the tab has a saved journey, so its id rides along with the article.
+  await expect(page).toHaveURL(/\/play\?a=Jazz&j=[a-z0-9]+$/);
   await page.locator('#share').focus();
   await page.keyboard.press('Enter');
-  await expect(page.locator('#toast')).toContainText('Link copied. It opens Jazz on the map.');
+  await expect(page.locator('#toast')).toContainText('Link copied. It rebuilds this journey, 2 stops, from Wikipedia.');
   const link = await page.evaluate(() => navigator.clipboard.readText());
-  expect(link).toMatch(/\/play\?a=Jazz$/);
+  expect(link).toMatch(/\/play\?a=Jazz&t=1\.[A-Za-z0-9_-]+\.[0-9a-z]{4}$/);
   const second = await context.newPage();
   await second.goto(link);
   await expect(second.locator('#panel h1')).toHaveText('Jazz');

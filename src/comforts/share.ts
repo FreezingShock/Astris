@@ -43,6 +43,8 @@ export interface ShareOptions {
   onMap: () => boolean;
   /** Tell the reader something in a line. */
   toast: (message: string) => void;
+  /** The journey this tab is recording, if any: its saved id and the token that rebuilds its path. */
+  journey?: () => { id: string | null; token: string | null; steps: number };
 }
 
 /**
@@ -69,7 +71,10 @@ export class Share {
     const state = this.o.state();
     if (!state || !this.o.onMap()) return;
     if ((location.pathname.replace(/\/+$/, '') || '/') !== PLAY_PATH) return;
-    const search = shareSearch(state);
+    let search = shareSearch(state);
+    // A journey that is saved keeps its id in the address, so a refresh finds it. The article stays as the fallback for anyone else.
+    const id = state.mode === 'explore' ? this.o.journey?.().id : null;
+    if (id) search += '&j=' + id;
     if (location.search !== search) history.replaceState(history.state, '', PLAY_PATH + search);
   }
 
@@ -78,12 +83,20 @@ export class Share {
     const state = this.o.state();
     if (!state) return null;
     this.sync();
-    const url = shareUrl(state, location.origin);
+    const trip = state.mode === 'explore' ? this.o.journey?.() : undefined;
+    // With a journey behind it, the link carries the whole path, so a friend rebuilds the same map.
+    const url = trip?.token ? shareUrl(state, location.origin) + '&t=' + trip.token : shareUrl(state, location.origin);
     const copied = await navigator.clipboard.writeText(url).then(
       () => true,
       () => false, // no clipboard access, for example on an insecure origin
     );
-    this.o.toast(copied ? shareNote(state) : 'Could not reach the clipboard. Copy the link from the address bar.');
+    this.o.toast(
+      copied
+        ? trip?.token
+          ? 'Link copied. It rebuilds this journey, ' + trip.steps + ' stops, from Wikipedia.'
+          : shareNote(state)
+        : 'Could not reach the clipboard. Copy the link from the address bar.',
+    );
     return url;
   }
 }
