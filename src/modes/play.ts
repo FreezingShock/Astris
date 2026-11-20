@@ -64,14 +64,7 @@ export class Play {
       onTravel: (title, now) => this.travelled(title, now),
       onFrame: (stats, now) => {
         $('gstat').textContent =
-          stats.stars +
-          ' stars · ' +
-          stats.memories +
-          (stats.memories === 1 ? ' memory' : ' memories') +
-          ' · ' +
-          this.discovery.count +
-          ' articles discovered · ' +
-          this.copy.status;
+          stats.stars + ' stars · ' + stats.memories + (stats.memories === 1 ? ' memory' : ' memories') + ' · ' + this.discovery.label + ' · ' + this.copy.status;
         if (this.race && !this.race.done) {
           const t = document.getElementById('rt');
           if (t) t.textContent = clock(now - this.race.t0);
@@ -180,7 +173,6 @@ export class Play {
   }
 
   private reset(data: Constellation): void {
-    this.discovery.reset();
     this.discovery.note(data);
     this.engine.reset(data);
   }
