@@ -4,6 +4,7 @@ import { Connect, chainBetween, connectHtml, type ConnectHost, type ConnectState
 import { DAILY_POOL, bestDaily, dailyPair, dayLabel, dayOf, saveDaily } from '../../src/modes/daily';
 import { failureOf } from '../../src/modes/failure';
 import { Graph, graphOf, route } from '../../src/modes/graph';
+import { closest } from '../../src/modes/panel';
 import { PAR_BUDGET, beginRace, hudHtml, par, randomPair, stepRace } from '../../src/modes/race';
 import { safeUrl, summaryHtml } from '../../src/modes/summary';
 import type { DataProvider } from '../../src/types';
@@ -375,5 +376,47 @@ describe('connect two', () => {
     expect(chain).toContain('2 links');
     expect(chain).toContain("id='cstop'");
     expect(connectHtml({ step: 'chain', chain: ['A', 'Z'], at: 1, walking: false })).toContain('1 link<');
+  });
+});
+
+describe('picking the next chain for the reader', () => {
+  it('connects a picked pair in one step', async () => {
+    const provider = new SampleProvider();
+    const states: ConnectState[] = [];
+    const h: ConnectHost = {
+      provider,
+      current: () => null,
+      open: async (t) => t,
+      travel: async () => true,
+      mark: () => undefined,
+      render: (s) => void (s && states.push(s)),
+      wait: () => Promise.resolve(),
+    };
+    const connect = new Connect(h);
+    await connect.surprise(async () => ({ start: 'Brutalist architecture', target: 'Jazz' }));
+    expect(states[0]).toEqual({ step: 'picking' });
+    expect(states[states.length - 1]).toMatchObject({ step: 'chain', walking: false });
+  });
+
+  it('falls back to the form when no pair can be picked', async () => {
+    const states: ConnectState[] = [];
+    const h = {
+      provider: new SampleProvider(),
+      current: () => null,
+      open: async (t: string) => t,
+      travel: async () => true,
+      mark: () => undefined,
+      render: (s: ConnectState | null) => void (s && states.push(s)),
+      wait: () => Promise.resolve(),
+    };
+    await new Connect(h).surprise(() => Promise.reject(new Error('no pair')));
+    expect(states[states.length - 1]).toMatchObject({ step: 'form' });
+  });
+
+  it('lists strong ties first and leaves visited places for last', () => {
+    const n = (title: string, rank: number, score: number) => ({ title, rank, score });
+    const nodes = [n('a', 4, 9), n('b', 1, 1), n('c', 1, 5), n('d', 2, 3)];
+    expect(closest(nodes, new Set(), 4).map((x) => x.title)).toEqual(['c', 'b', 'd', 'a']);
+    expect(closest(nodes, new Set(['c']), 4).map((x) => x.title)).toEqual(['b', 'd', 'a', 'c']);
   });
 });
