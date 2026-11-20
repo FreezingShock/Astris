@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Discovery, PREVIEW_DELAY, StarCursor, Tip, announce, firstLine, nextStar, previewHtml, type DiscoveryStore, type StarReach, type SummarySource } from '../../src/comforts';
+import { Discovery, PREVIEW_DELAY, Share, StarCursor, Tip, announce, firstLine, nextStar, previewHtml, readShare, shareNote, shareSearch, shareUrl } from '../../src/comforts';
+import type { DiscoveryStore, ShareState, StarReach, SummarySource } from '../../src/comforts';
 import type { Con, StarNode } from '../../src/engine';
 import type { ArticleSummary, Constellation, Star } from '../../src/types';
 
@@ -275,5 +276,99 @@ describe('keyboard travel', () => {
     expect(calls.slice(2)).toEqual(['zoom 1.40', 'zoom 0.71', 'fit']);
     map.current = null;
     expect(cursor.key('ArrowLeft')).toBe(false);
+  });
+});
+
+describe('share links', () => {
+  const explore: ShareState = { mode: 'explore', article: 'Brutalist architecture' };
+  const race: ShareState = { mode: 'race', start: 'Brutalist architecture', target: 'Jazz' };
+
+  it('writes readable queries and reads them back', () => {
+    expect(shareSearch(explore)).toBe('?a=Brutalist%20architecture');
+    expect(shareSearch(race)).toBe('?race=Brutalist%20architecture|Jazz');
+    expect(readShare(shareSearch(explore))).toEqual(explore);
+    expect(readShare(shareSearch(race))).toEqual(race);
+    const odd: ShareState = { mode: 'explore', article: 'AC/DC & "Rock+Roll"? 100%' };
+    expect(readShare(shareSearch(odd))).toEqual(odd);
+    expect(shareUrl(race, 'https://astris.example/')).toBe('https://astris.example/play?race=Brutalist%20architecture|Jazz');
+  });
+
+  it('ignores links that name nothing', () => {
+    expect(readShare('')).toBeNull();
+    expect(readShare('?a=%20')).toBeNull();
+    expect(readShare('?race=Jazz')).toBeNull();
+    expect(readShare('?race=A|B|C')).toBeNull();
+    expect(readShare('?race=Jazz&a=Blues')).toEqual({ mode: 'explore', article: 'Blues' });
+  });
+
+  describe('Share', () => {
+    function setup(
+      path: string,
+      search: string,
+      clipboard: boolean,
+    ): { share: Share; replaced: string[]; toasts: string[]; copied: string[]; now: { state: ShareState | null; onMap: boolean } } {
+      const replaced: string[] = [];
+      const toasts: string[] = [];
+      const copied: string[] = [];
+      const now: { state: ShareState | null; onMap: boolean } = { state: explore, onMap: true };
+      const loc = { pathname: path, search, origin: 'https://astris.example' };
+      vi.stubGlobal('location', loc);
+      vi.stubGlobal('history', {
+        state: null,
+        replaceState: (_s: unknown, _t: string, url: string) => {
+          replaced.push(url);
+          loc.search = url.slice(url.indexOf('?'));
+        },
+      });
+      vi.stubGlobal('navigator', {
+        clipboard: { writeText: (text: string) => (clipboard ? Promise.resolve(void copied.push(text)) : Promise.reject(new Error('denied'))) },
+      });
+      vi.stubGlobal('document', { createElement: () => ({ addEventListener: () => undefined }) });
+      const host = { prepend: () => undefined } as unknown as HTMLElement;
+      const share = new Share({ host, state: () => now.state, onMap: () => now.onMap, toast: (m) => void toasts.push(m) });
+      return { share, replaced, toasts, copied, now };
+    }
+
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('keeps the address bar on the current article and mode', () => {
+      const { share, replaced, now } = setup('/play', '', true);
+      share.sync();
+      share.sync();
+      now.state = race;
+      share.sync();
+      expect(replaced).toEqual(['/play?a=Brutalist%20architecture', '/play?race=Brutalist%20architecture|Jazz']);
+    });
+
+    it('leaves the address bar alone off the map', () => {
+      const off = setup('/play', '', true);
+      off.now.onMap = false;
+      off.share.sync();
+      off.now.onMap = true;
+      off.now.state = null;
+      off.share.sync();
+      expect(off.replaced).toEqual([]);
+      const site = setup('/design-system', '', true);
+      site.share.sync();
+      expect(site.replaced).toEqual([]);
+    });
+
+    it('copies the link and says what it opens', async () => {
+      const { share, toasts, copied, now } = setup('/play/', '', true);
+      expect(await share.copy()).toBe('https://astris.example/play?a=Brutalist%20architecture');
+      now.state = race;
+      await share.copy();
+      expect(copied).toEqual(['https://astris.example/play?a=Brutalist%20architecture', 'https://astris.example/play?race=Brutalist%20architecture|Jazz']);
+      expect(toasts).toEqual([shareNote(explore), 'Link copied. It starts the race from Brutalist architecture to Jazz.']);
+      now.state = null;
+      expect(await share.copy()).toBeNull();
+    });
+
+    it('points at the address bar when the clipboard is closed', async () => {
+      const { share, toasts, replaced } = setup('/play', '', false);
+      await share.copy();
+      expect(replaced).toEqual(['/play?a=Brutalist%20architecture']);
+      expect(toasts).toEqual(['Could not reach the clipboard. Copy the link from the address bar.']);
+    });
   });
 });

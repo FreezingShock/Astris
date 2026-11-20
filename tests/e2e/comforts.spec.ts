@@ -13,7 +13,7 @@ test('the discovery count survives a new map and a reload', async ({ page }) => 
   await expect(page.locator('#hud')).toContainText('par');
   await expect.poll(count).toBeGreaterThan(first);
   const second = await count();
-  await page.reload();
+  await page.goto('/play');
   await expect(page.locator('#panel h1')).toHaveText('Architecture');
   await expect.poll(count).toBeGreaterThanOrEqual(second);
 });
@@ -44,4 +44,36 @@ test('typing in the search box does not move the star cursor', async ({ page }) 
   await page.keyboard.press('ArrowDown');
   await expect(page.locator('#gq')).toHaveValue('j');
   await expect(page.locator('#panel h1')).toHaveText('Architecture');
+});
+
+test('the address bar follows the map and the Share button copies a link that restores it', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/play');
+  await expect(page.locator('#panel h1')).toHaveText('Architecture');
+  await expect(page).toHaveURL(/\/play\?a=Architecture$/);
+  await page.locator('#gq').fill('jaz');
+  await expect(page.locator('#gsugg li').first()).toContainText('Jazz');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/play\?a=Jazz$/);
+  await page.locator('#share').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#toast')).toContainText('Link copied. It opens Jazz on the map.');
+  const link = await page.evaluate(() => navigator.clipboard.readText());
+  expect(link).toMatch(/\/play\?a=Jazz$/);
+  const second = await context.newPage();
+  await second.goto(link);
+  await expect(second.locator('#panel h1')).toHaveText('Jazz');
+  await expect(second.locator('#modes [data-mode="explore"]')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('a race shares as a race and leaving it shares the article again', async ({ page, context }) => {
+  await page.goto('/play?race=Brutalist%20architecture|Jazz');
+  await expect(page.locator('#hud')).toContainText('Brutalist architecture → Jazz');
+  await expect(page).toHaveURL(/\/play\?race=Brutalist%20architecture\|Jazz$/);
+  const second = await context.newPage();
+  await second.goto(page.url());
+  await expect(second.locator('#hud')).toContainText('Brutalist architecture → Jazz');
+  await expect(second.locator('#modes [data-mode="race"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#modes [data-mode="explore"]').click();
+  await expect(page).toHaveURL(/\/play\?a=Brutalist%20architecture$/);
 });
