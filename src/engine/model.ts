@@ -25,6 +25,8 @@ export interface StarNode extends Star {
   guy: number;
   /** True when the star was already on the map. It sits where the first one is and only adds a thread. */
   dup?: boolean;
+  /** Set while the star is being cleared: when, which way it drifts, how far it had already sunk, and whether it is going for good. */
+  out?: { t0: number; ux: number; uy: number; k0: number; hard: boolean };
   /** Cached label widths. */
   wb?: number;
   ws?: number;
@@ -74,6 +76,8 @@ export interface Con {
   gone: boolean;
   /** Largest distance of any star from the centre, in unscaled units. Cleared when stars are dropped. */
   reach?: number;
+  /** Set when a stand-in became the real constellation: the centre does not regrow, it swells. */
+  arrivedAt?: number;
   /** True for a stand-in centre while its constellation loads: it draws the centre star and nothing else. */
   pending?: boolean;
   /** Whether any of it was on screen in the last frame. */

@@ -6,6 +6,7 @@ import { drawCon, zoomSize } from './draw';
 import { makeCon } from './layout';
 import type { Camera, Con, PickTarget, Point, StarNode } from './model';
 import { pixelRatio, sprites, type Sprites } from './sprites';
+import { Particles } from './particles';
 import { World } from './world';
 
 const TAU = Math.PI * 2;
@@ -72,6 +73,11 @@ export class Engine {
   /** A travel that has started and is waiting for its constellation. */
   private pending: { title: string; from: Con; con: Con; wasVisited: boolean } | null = null;
   private readonly world = new World(CONFIG.starGap);
+  private readonly particles = new Particles(CONFIG.maxParticles);
+  /** Stars being cleared away: they fade and drift, then leave their constellation for good. */
+  private dying: { con: Con; node: StarNode }[] = [];
+  /** Stars sinking to make room for a travel that is still loading. */
+  private softened: StarNode[] = [];
   private readonly cam: Camera = { x: 0, y: 0, z: 1 };
   private readonly tgt: Camera = { x: 0, y: 0, z: 1 };
   private raf = 0;
@@ -202,12 +208,20 @@ export class Engine {
       const now = performance.now();
       const con = makeCon(data, p.con.x, p.con.y, now, 0);
       con.sc = CONFIG.childScale;
+      con.arrivedAt = now;
       this.pending = null;
       this.clear(con);
       this.settle(con);
       this.cons[this.cons.indexOf(p.con)] = con;
       this.current = con;
       this.trim(con);
+      if (!this.reduce) {
+        // leave the lean-in: settle to the fitted zoom, and burst light out from the new centre
+        const fit = this.fitZ(con);
+        this.tgt.z = Math.max(fit * CONFIG.keepZoomLow, Math.min(fit * CONFIG.keepZoomHigh, this.tgt.z / CONFIG.pushIn));
+        if (this.lod < 3)
+          this.particles.burst(con.x, con.y, con.subject, this.lod < 1 ? CONFIG.burstCount : CONFIG.burstCount / 2, now, CONFIG.burstSpeed, CONFIG.burstLifeMs, CONFIG.burstSize);
+      }
       this.events.onTravel?.(title, now);
       this.events.onChange?.(con);
       this.kick();
@@ -251,6 +265,12 @@ export class Engine {
     this.pending = { title, from, con, wasVisited: this.visited.has(from.title) };
     this.cons.push(con);
     this.arrive(from, con, now, false);
+    if (!this.reduce) {
+      // the chosen star leans the camera in, the stars that will make way sink, and a trail of sparks marks the journey
+      this.tgt.z = Math.min(CONFIG.zoomMax, this.tgt.z * CONFIG.pushIn);
+      this.makeRoom(con, now);
+      if (this.lod < 2) this.particles.trail(from.x, from.y, con.x, con.y, subject, CONFIG.trailCount, now, CONFIG.trailSpanMs, CONFIG.trailLifeMs, CONFIG.trailSize);
+    }
     return true;
   }
 
@@ -259,6 +279,8 @@ export class Engine {
     const p = this.pending;
     if (!p || (title !== undefined && p.title !== title)) return;
     this.pending = null;
+    for (const n of this.softened) if (!n.out?.hard) n.out = undefined;
+    this.softened = [];
     this.cons = this.cons.filter((c) => c !== p.con);
     this.current = p.from;
     this.trail.pop();
@@ -359,24 +381,42 @@ export class Engine {
    * constellation threads to it when it names the same article.
    */
   private clear(con: Con): void {
-    const R = CONFIG.rMax * con.sc * CONFIG.clearShare;
-    const keep = new Set<string>(this.cons.map((c) => c.title));
-    keep.add(con.title);
-    if (this.markerTitle) keep.add(this.markerTitle);
-    const gone = new Set<string>();
-    for (const c of this.cons) {
-      for (const n of c.nodes) {
-        if (n.dup || keep.has(n.title)) continue;
-        if (Math.hypot(c.x + n.dx * c.sc - con.x, c.y + n.dy * c.sc - con.y) < R) gone.add(n.title);
-      }
-    }
+    const now = performance.now();
+    const gone = this.inArea(con);
+    // a star that sank while loading but is not going after all rises again
+    for (const n of this.softened) if (!n.out?.hard && !gone.has(n.title)) n.out = undefined;
+    this.softened = [];
     if (!gone.size) return;
+    const R = CONFIG.rMax * con.sc * CONFIG.clearShare;
+    let dust = 0;
     for (const c of this.cons) {
-      const drop = new Set(c.nodes.filter((n) => gone.has(n.title)));
+      const drop = new Set(c.nodes.filter((n) => gone.has(n.title) && !n.out?.hard));
       if (!drop.size) continue;
-      c.nodes = c.nodes.filter((n) => !drop.has(n));
-      for (const g of c.groups) g.nodes = g.nodes.filter((n) => !drop.has(n));
-      c.groups = c.groups.filter((g) => g.nodes.length > 0);
+      for (const n of drop) {
+        const wx = c.x + n.dx * c.sc;
+        const wy = c.y + n.dy * c.sc;
+        const d = Math.hypot(wx - con.x, wy - con.y) || 1;
+        const sunk = n.out && !n.out.hard ? (1 - CONFIG.roomAlpha) * ease((now - n.out.t0) / CONFIG.roomMs) : 0;
+        n.out = { t0: now + Math.min(1, d / R) * CONFIG.clearDelayMs, ux: (wx - con.x) / d, uy: (wy - con.y) / d, k0: Math.max(0, sunk), hard: true };
+        if (this.reduce) continue;
+        this.dying.push({ con: c, node: n });
+        // dust: a mote leaves with each of the brighter stars, up to a budget
+        if (dust < CONFIG.dustCount && n.rank <= 4 && !n.dup && this.lod < 2) {
+          dust++;
+          this.particles.add({
+            x: wx,
+            y: wy,
+            vx: ((wx - con.x) / d) * 0.02 + Math.sin(wx) * 0.01,
+            vy: ((wy - con.y) / d) * 0.02 + Math.cos(wy) * 0.01,
+            t0: n.out.t0,
+            life: CONFIG.dustLifeMs,
+            size: CONFIG.dustSize,
+            a: 0.7,
+            subject: n.subject,
+            keep: 0.2,
+          });
+        }
+      }
       c.reach = undefined;
       // a thread that hung from a removed star hangs from the nearest star closer in, or from the centre
       const maxSq = CONFIG.maxThread * CONFIG.maxThread;
@@ -385,7 +425,7 @@ export class Engine {
         let best: StarNode | null = null;
         let bd = maxSq;
         for (const p of c.nodes) {
-          if (p === n || p.r >= n.r || p.dup) continue;
+          if (p === n || p.r >= n.r || p.dup || drop.has(p)) continue;
           const d = (p.dx - n.dx) * (p.dx - n.dx) + (p.dy - n.dy) * (p.dy - n.dy);
           if (d < bd) {
             bd = d;
@@ -394,8 +434,67 @@ export class Engine {
         }
         n.par = best;
       }
+      if (this.reduce) this.remove(c, drop);
     }
     for (const t of gone) this.world.delete(t);
+  }
+
+  /** Titles of the stars that a new constellation at `con` will clear: those inside its area, except centres visited and the race target. */
+  private inArea(con: Con): Set<string> {
+    const R = CONFIG.rMax * con.sc * CONFIG.clearShare;
+    const keep = new Set<string>(this.cons.map((c) => c.title));
+    keep.add(con.title);
+    if (this.markerTitle) keep.add(this.markerTitle);
+    const gone = new Set<string>();
+    for (const c of this.cons) {
+      if (c.pending) continue;
+      for (const n of c.nodes) {
+        if (n.dup || keep.has(n.title)) continue;
+        if (Math.hypot(c.x + n.dx * c.sc - con.x, c.y + n.dy * c.sc - con.y) < R) gone.add(n.title);
+      }
+    }
+    return gone;
+  }
+
+  /** While a travel loads, the stars that will make way sink to a dim, so the clearing starts at the click. */
+  private makeRoom(con: Con, now: number): void {
+    const gone = this.inArea(con);
+    const R = CONFIG.rMax * con.sc * CONFIG.clearShare;
+    this.softened = [];
+    for (const c of this.cons) {
+      if (c.pending) continue;
+      for (const n of c.nodes) {
+        if (!gone.has(n.title) || n.out) continue;
+        const wx = c.x + n.dx * c.sc;
+        const wy = c.y + n.dy * c.sc;
+        const d = Math.hypot(wx - con.x, wy - con.y) || 1;
+        n.out = { t0: now + Math.min(1, d / R) * CONFIG.clearDelayMs, ux: (wx - con.x) / d, uy: (wy - con.y) / d, k0: 0, hard: false };
+        this.softened.push(n);
+      }
+    }
+  }
+
+  /** Take stars out of a constellation: its list, its thread groups and its reach. */
+  private remove(c: Con, drop: Set<StarNode>): void {
+    c.nodes = c.nodes.filter((n) => !drop.has(n));
+    for (const g of c.groups) g.nodes = g.nodes.filter((n) => !drop.has(n));
+    c.groups = c.groups.filter((g) => g.nodes.length > 0);
+    c.reach = undefined;
+  }
+
+  /** Stars that have finished fading leave their constellation. */
+  private prune(now: number): void {
+    if (!this.dying.length) return;
+    const done = new Map<Con, Set<StarNode>>();
+    this.dying = this.dying.filter((d) => {
+      const out = d.node.out;
+      if (out && now - out.t0 < CONFIG.clearMs + 50) return true;
+      const set = done.get(d.con) ?? new Set<StarNode>();
+      set.add(d.node);
+      done.set(d.con, set);
+      return false;
+    });
+    for (const [c, set] of done) this.remove(c, set);
   }
 
   /**
@@ -486,6 +585,7 @@ export class Engine {
       }
     }
     this.cons = this.cons.filter((c) => !(c.gone && c.dim < CONFIG.goneCutoff));
+    this.prune(now);
     let total = 0;
     const live = this.cons.filter((c) => !c.gone);
     for (const c of live) if (c !== cur) total += drawCon(ctx, c, cam, now, W, H, { pulses: 0, centreScale: CONFIG.visitedCentreScale, lod: level }, sp, reduce);
@@ -509,6 +609,11 @@ export class Engine {
     ctx.lineWidth = 1;
     ctx.globalCompositeOperation = 'source-over';
     if (cur) total += drawCon(ctx, cur, cam, now, W, H, { pulses: CONFIG.pulses, lod: level }, sp, reduce);
+    if (this.particles.count) {
+      ctx.globalCompositeOperation = 'lighter';
+      this.particles.draw(ctx, cam, W, H, now, sp);
+      ctx.globalCompositeOperation = 'source-over';
+    }
 
     // marker around one star, used for the race target
     if (this.markerTitle && cur) {
@@ -550,7 +655,7 @@ export class Engine {
       if (c.vis === false) continue;
       for (let j0 = 0; j0 < c.nodes.length && placed < CONFIG.maxLabels; j0++) {
         const n = c.nodes[j0];
-        if (!n || !n.on || n.dup || n.a < CONFIG.labelMinGrow || n === this.hover) continue;
+        if (!n || !n.on || n.dup || n.out || n.a < CONFIG.labelMinGrow || n === this.hover) continue;
         const big = n.rank <= CONFIG.labelStrongRank;
         if (!big && cam.z * c.sc < CONFIG.labelFarZoom && n.rank > CONFIG.labelFarRank) continue;
         ctx.font = big ? CONFIG.fontStrong : CONFIG.fontSoft;
@@ -661,7 +766,7 @@ export class Engine {
     for (const c of [cur, ...this.cons.filter((x) => x !== cur && !x.gone)]) {
       if (c.vis === false) continue;
       for (const n of c.nodes) {
-        if (!n.on || n.a < CONFIG.pickMinGrow) continue;
+        if (!n.on || n.a < CONFIG.pickMinGrow || n.out) continue;
         const d = (n.sx - p.x) * (n.sx - p.x) + (n.sy - p.y) * (n.sy - p.y);
         if (d < bd) {
           bd = d;
