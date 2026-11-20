@@ -44,7 +44,7 @@
 #tour {
   position: absolute;
   left: 50%;
-  bottom: 56px;
+  bottom: 120px;
   transform: translateX(-50%);
   z-index: 3;
   display: none;
@@ -172,9 +172,12 @@
   }
 }
 
-/* on a phone the footer wraps to two lines, so the tutorial sits above it */
+/* on a phone the footer wraps and notices are taller, so the tutorial sits above both */
 @media (max-width: 600px) {
   #tour {
-    bottom: 84px;
+    bottom: 176px;
+  }
+  #play .gbar .right .gbtn {
+    white-space: nowrap;
   }
 }
