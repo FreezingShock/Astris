@@ -33,9 +33,43 @@ export const CONFIG = {
   bloomRingMs: 1150,
   bloomSpreadMs: 1050,
   bloomLeadMs: 120,
+  /** Extra per-star delay, spread by the title's hash so that a band does not land all at once. */
+  bloomJitterMs: 110,
   starPopMs: 420,
   threadDrawMs: 340,
   centrePopMs: 520,
+  /** The ring: a thin bright line with a wide faint halo just inside it. */
+  ringAlpha: 0.55,
+  ringWidth: 2,
+  ringHaloAlpha: 0.07,
+  ringHaloWidth: 22,
+
+  /** Stars. Sizes follow the square root of the zoom, clamped to this range. */
+  zoomSizeMin: 0.55,
+  zoomSizeMax: 2.2,
+  /** Sprite half-size as a multiple of the star's size, and the white core's share of it. */
+  glowScale: 2.1,
+  coreScale: 0.5,
+  /** Ranks up to this one get the white core. */
+  coreRank: 1,
+  twinkleSpeed: 0.0022,
+  twinkleAmount: 0.16,
+  /** Slowest twinkle, and how much faster a star's hash can make it. */
+  twinkleRateMin: 0.6,
+  twinkleRateSpread: 0.9,
+  /** Stars this far outside the view are skipped. */
+  cullMargin: 30,
+  /** Below these brightnesses a constellation, a thread group or a dissolving star is not drawn. */
+  dimCutoff: 0.015,
+  threadCutoff: 0.008,
+  dissolveCutoff: 0.01,
+
+  /** The centre star: half-size on the map and on the main page, and its slow breathing. */
+  centreSize: 30,
+  centreSizeMini: 20,
+  centreGrowFrom: 0.35,
+  centreBreatheSpeed: 0.0016,
+  centreBreatheAmount: 0.05,
 
   /** Travel and memories. */
   memoryDim: 0.3,
@@ -49,11 +83,33 @@ export const CONFIG = {
   dissolveSpreadMs: 460,
   dissolveReach: 520,
   dissolveDrift: 34,
+  /** A dissolving star shrinks by this share as it goes. */
+  dissolveShrink: 0.5,
+  /** A memory keeps its stars up to this rank. The rest dissolve. */
+  memoryKeepRank: 2,
+  /** How long a memory's outer threads take to fade. */
+  memoryThreadFadeMs: 420,
+  /** A memory's centre star is this much brighter than its other stars. */
+  memoryCentreBoost: 0.25,
+  /** A constellation that was dropped is removed once it is this faint. */
+  goneCutoff: 0.02,
   trailLength: 14,
+  /** The dotted trail between memories. */
+  trailWidth: 1.5,
+  trailDash: [2, 7],
+  trailAlphaMax: 0.55,
+  trailAlphaBoost: 0.2,
 
   /** Points of light running inward along threads. */
   pulses: 12,
   pulseMs: 1500,
+  /** Delay between the first pulses, and the longest wait before one sets off again. */
+  pulseStaggerMs: 240,
+  pulseRestMs: 900,
+  /** Pulses start from one of this many stars nearest the centre. */
+  pulsePool: 90,
+  pulseSize: 5,
+  pulseAlpha: 0.9,
 
   /** Titles. */
   maxLabels: 46,
@@ -61,22 +117,83 @@ export const CONFIG = {
   fontMemory: "400 14px 'Linux Libertine', Georgia, serif",
   fontStrong: "14px 'Linux Libertine', Georgia, serif",
   fontSoft: "11.5px -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
+  fontMini: '600 15px Georgia, serif',
+  titleFadeMs: 500,
+  /** Distance below the centre star of the live title, a memory's title and the main page's title. */
+  titleOffset: 46,
+  memoryTitleOffset: 26,
+  miniTitleOffset: 34,
+  memoryTitleAlphaMax: 0.9,
+  memoryTitleAlphaBoost: 0.35,
+  /** The space a centre title reserves: padding each side, rise above the baseline, and height. */
+  titleBoxPad: 4,
+  titleBoxRise: 18,
+  titleBoxHeight: 24,
+  /** A star gets its title once it has grown this far. */
+  labelMinGrow: 0.9,
+  /** Ranks up to this one use the strong font. */
+  labelStrongRank: 2,
+  /** Ranks above labelFarRank are titled only at this zoom or closer. */
+  labelFarRank: 3,
+  labelFarZoom: 1.15,
+  /** Where a title sits beside its star, and the box it reserves. */
+  labelOffset: 0.9,
+  labelGap: 5,
+  labelRise: 8,
+  labelBaseline: 4,
+  labelHeight: 15,
+  labelSpacing: 4,
+  labelEdge: 6,
 
   /** Camera. */
   cameraEase: 0.0052,
+  /** The longest step one frame may take, so that a stalled tab does not jump. */
+  maxFrameMs: 64,
+  /** A new map starts this much zoomed out and eases in. */
+  resetZoom: 0.82,
   zoomMin: 0.3,
   zoomMax: 3.2,
   fitMin: 0.45,
   fitMax: 1.25,
+  /** Fit: the map units that must fit, and the room left for the bars around the map. */
+  fitSpan: 800,
+  fitMarginX: 60,
+  fitMarginY: 150,
   wideScreen: 900,
   panelWidth: 350,
   panelOffset: 168,
   zoomStep: 1.4,
   wheelSpeed: 0.0015,
   maxPixelRatio: 2,
+  /** With reduced motion the loop stops once the camera and the memories are this close to rest. */
+  settlePan: 0.05,
+  settleZoom: 0.0005,
+  settleDim: 0.01,
+  /** Background stars: how far they follow the camera, and their brightness. */
+  dustParallax: 0.12,
+  dustAlpha: 0.9,
+  dustTile: 512,
+
+  /** The main page's small map. */
+  miniDelayMs: 200,
+  miniSpan: 760,
+  miniAspect: 1.5,
+  miniPulses: 5,
 
   /** Input. */
   pickRadius: 15,
   memoryPickRadius: 24,
   clickSlop: 5,
+  /** A star can be picked, or carry the marker, once it has grown this far. */
+  pickMinGrow: 0.5,
+  hoverRingGap: 6,
+  hoverRingAlpha: 0.8,
+  /** A star highlighted from the keyboard is brought at least this far inside the view. */
+  highlightMargin: 40,
+  /** The dashed ring around the race target. */
+  markerRadius: 13,
+  markerPulse: 3,
+  markerPulseSpeed: 0.005,
+  markerWidth: 1.6,
+  markerDash: [3, 3],
 } as const;
