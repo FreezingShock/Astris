@@ -56,7 +56,11 @@ export class Play {
     private readonly copy: SourceCopy,
     private readonly isOpen: () => boolean,
   ) {
-    this.tip = new Tip($('tip'), (title) => !!this.race && !this.race.done && title === this.race.target);
+    this.tip = new Tip(
+      $('tip'),
+      (title) => !!this.race && !this.race.done && title === this.race.target,
+      (title, signal) => this.provider.summary(title, signal),
+    );
     this.engine = new Engine($<HTMLCanvasElement>('sky'), {
       onPick: (title) => void this.navigate(title),
       onHover: (target, p, w, h) => this.tip.show(target, p, w, h),

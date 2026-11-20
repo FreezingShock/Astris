@@ -1,0 +1,31 @@
+/* Styles for the comforts: the hover preview inside #tip. Colours come from tokens.css. */
+#tip .pv {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--rule-soft);
+}
+#tip .pv img {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border: 1px solid var(--rule-soft);
+  background: var(--tint);
+}
+#tip .pv p {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.4;
+}
+#tip .pv.wait p {
+  color: var(--muted);
+}
+#tip small {
+  display: block;
+  margin-top: 5px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
