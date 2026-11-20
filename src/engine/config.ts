@@ -188,6 +188,8 @@ export const CONFIG = {
   pickMinGrow: 0.5,
   hoverRingGap: 6,
   hoverRingAlpha: 0.8,
+  /** A star highlighted from the keyboard is brought at least this far inside the view. */
+  highlightMargin: 40,
   /** The dashed ring around the race target. */
   markerRadius: 13,
   markerPulse: 3,

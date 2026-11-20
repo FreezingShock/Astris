@@ -9,6 +9,12 @@ import { sprites, type Sprites } from './sprites';
 
 const TAU = Math.PI * 2;
 
+/** How far the view must move, in screen pixels, for a point to sit at least `margin` inside it. */
+export function nudgeIntoView(p: Point, width: number, height: number, margin: number): Point {
+  const along = (v: number, size: number): number => (v < margin ? v - margin : v > size - margin ? v - (size - margin) : 0);
+  return { x: along(p.x, width), y: along(p.y, height) };
+}
+
 export interface FrameStats {
   /** Stars drawn this frame, across the live constellation and its memories. */
   stars: number;
@@ -230,6 +236,28 @@ export class Engine {
     this.tgt.x = cur.x + this.focusOffset();
     this.tgt.y = cur.y;
     this.kick();
+  }
+
+  /**
+   * Ring a star of the live constellation as if the pointer were over it, for keyboard travel.
+   * Null clears the ring. Returns true when a star was ringed.
+   * A star near the edge of the view is brought inside it.
+   */
+  highlight(title: string | null): boolean {
+    const node = title === null ? undefined : this.current?.nodes.find((n) => n.title === title && n.on && n.a >= CONFIG.pickMinGrow);
+    if (!node) {
+      this.hover = null;
+      this.events.onHover?.(null, { x: 0, y: 0 }, this.W, this.H);
+      this.kick();
+      return false;
+    }
+    this.hover = node;
+    const shift = nudgeIntoView({ x: node.sx, y: node.sy }, this.W, this.H, CONFIG.highlightMargin);
+    this.tgt.x += shift.x / this.cam.z;
+    this.tgt.y += shift.y / this.cam.z;
+    this.events.onHover?.({ kind: 'star', node }, { x: node.sx, y: node.sy }, this.W, this.H);
+    this.kick();
+    return true;
   }
 
   /** Forget measured label widths, for when a web font finishes loading. */
