@@ -8,7 +8,7 @@ import { dailyPair, saveDaily } from './daily';
 import { DRIFT_MS, nextStop } from './drift';
 import { UNREACHABLE_NOTE, failureOf } from './failure';
 import { legendHtml, panelHtml } from './panel';
-import { PICKING_HTML, beginRace, hudHtml, par, randomPair, stepRace, type Race } from './race';
+import { PICKING_HTML, beginRace, hudHtml, par, randomPair, stepRace, type Pair, type Race } from './race';
 
 export type Mode = 'explore' | 'race' | 'daily' | 'connect' | 'drift';
 
@@ -41,6 +41,8 @@ export class Play {
   /** Counts race starts, so a slow start that has been overtaken is dropped. */
   private raceSeq = 0;
   private picking = false;
+  /** A random pair picked ahead of time, so the next new chain starts at once. */
+  private ahead: Promise<Pair> | null = null;
   private readonly connect: Connect;
   private readonly discovery = new Discovery();
   private readonly tip: Tip;
@@ -65,6 +67,8 @@ export class Play {
       $('tip'),
       (title) => !!this.race && !this.race.done && title === this.race.target,
       (title, signal) => this.provider.summary(title, signal),
+      () => this.engine.current?.title ?? null,
+      (title) => this.engine.visited.has(title),
     );
     this.engine = new Engine($<HTMLCanvasElement>('sky'), {
       onPick: (title) => {
@@ -206,6 +210,34 @@ export class Play {
     await this.startRace(pair.start, pair.target, undefined, pair.day);
   }
 
+  /** A random pair: the one picked ahead if there is one, otherwise a fresh pick. */
+  private pair(): Promise<Pair> {
+    const next = this.ahead ?? randomPair(this.provider);
+    this.ahead = null;
+    return next;
+  }
+
+  /** Pick the next pair in the background, once. A failed pick is forgotten. */
+  private prepare(): void {
+    if (this.ahead) return;
+    const pick = randomPair(this.provider);
+    this.ahead = pick;
+    pick.catch(() => {
+      if (this.ahead === pick) this.ahead = null;
+    });
+  }
+
+  /** Connect two articles chosen at random, in one click. */
+  async surprisePair(): Promise<void> {
+    if (this.mode !== 'connect') this.startConnect().catch(() => undefined);
+    await this.connect.surprise(() => this.pair());
+  }
+
+  /** The fastest way to a new chain: a new race, or a new pair in Connect two. */
+  newChain(): Promise<void> {
+    return this.mode === 'connect' ? this.surprisePair() : this.newRace();
+  }
+
   /** Start a race between a freshly picked random pair. */
   async newRace(): Promise<void> {
     const seq = ++this.raceSeq;
@@ -215,7 +247,7 @@ export class Play {
     this.picking = true;
     this.hud();
     try {
-      const pair = await randomPair(this.provider);
+      const pair = await this.pair();
       if (seq === this.raceSeq) await this.startRace(pair.start, pair.target, pair.par);
     } catch {
       if (seq !== this.raceSeq) return;
@@ -335,6 +367,7 @@ export class Play {
     if (stepRace(race, title, now)) {
       this.engine.markerTitle = null;
       if (race.day !== undefined) race.best = saveDaily(race.day, { clicks: race.clicks, time: race.time });
+      this.prepare();
     }
     this.hud();
   }
@@ -455,6 +488,14 @@ export class Play {
     });
     initKeyboard(gq, this.isOpen, { map: engine, go: (title) => void this.navigate(title) });
 
+    document.addEventListener('keydown', (e) => {
+      const t = e.target;
+      const typing = t instanceof HTMLElement && (t.isContentEditable || t.matches('input, textarea, select, button, a'));
+      if (e.key === 'n' && this.isOpen() && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        void this.newChain();
+      }
+    });
     $('surprise').addEventListener('click', () => void this.surprise());
     $('zin').addEventListener('click', () => engine.zoomBy(1.4));
     $('zout').addEventListener('click', () => engine.zoomBy(1 / 1.4));
@@ -491,6 +532,7 @@ export class Play {
       } else if (id === 'creplay') void this.connect.replay();
       else if (id === 'cstop') this.connect.halt();
       else if (id === 'cnew') this.connect.start();
+      else if (id === 'csurprise') void this.surprisePair();
       else if (id === 'again') void this.newRace();
       else if (id === 'retry') void this.retryRace();
       else if (id === 'quit') this.setMode('explore');

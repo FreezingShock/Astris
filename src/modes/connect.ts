@@ -10,7 +10,10 @@ export const CONNECT_BEAM = 4;
 const STEP_MS = 2600;
 
 export type ConnectState =
-  { step: 'form'; from: string; to: string; note?: string } | { step: 'searching'; from: string; to: string } | { step: 'chain'; chain: string[]; at: number; walking: boolean };
+  | { step: 'form'; from: string; to: string; note?: string }
+  | { step: 'picking' }
+  | { step: 'searching'; from: string; to: string }
+  | { step: 'chain'; chain: string[]; at: number; walking: boolean };
 
 /** The shortest chain found between two articles, or null. Every link in it can be clicked on the map. */
 export function chainBetween(provider: DataProvider, from: string, to: string): Promise<string[] | null> {
@@ -23,13 +26,16 @@ const field = (name: string, label: string, value: string): string =>
 
 /** The Connect two card: the form, the wait, then the chain with the current stop lit. */
 export function connectHtml(s: ConnectState): string {
+  if (s.step === 'picking') return "<div class='line'>Picking two articles…</div>";
   if (s.step === 'searching') return "<div class='line'>Looking for a chain from " + esc(s.from) + ' to <em>' + esc(s.to) + '</em>…</div>';
   if (s.step === 'form')
     return (
       "<form id='cform'><div class='line'>Connect two articles</div><div class='pair'>" +
       field('from', 'From', s.from) +
       field('to', 'To', s.to) +
-      "<button class='gbtn' type='submit'>Connect</button></div><datalist id='clist'></datalist>" +
+      "<button class='gbtn' type='submit'>Connect</button>" +
+      button('csurprise', 'Surprise me') +
+      "</div><datalist id='clist'></datalist>" +
       (s.note ? "<div class='note'>" + esc(s.note) + '</div>' : '') +
       "<div class='stats'>" +
       button('quit', 'Quit') +
@@ -48,7 +54,8 @@ export function connectHtml(s: ConnectState): string {
     (links === 1 ? ' link' : ' links') +
     '</span>' +
     (s.walking ? button('cstop', 'Stop') : button('creplay', 'Walk it again')) +
-    button('cnew', 'New pair') +
+    button('csurprise', 'Surprise pair') +
+    button('cnew', 'Choose pair') +
     button('quit', 'Quit') +
     '</div>'
   );
@@ -112,6 +119,21 @@ export class Connect {
     if (seq !== this.seq) return;
     if (!chain) return this.fail(start, to, 'No chain of ' + PAR_DEPTH + ' links or fewer was found. Try two articles that are closer.');
     await this.walk(chain);
+  }
+
+  /** Pick a pair for the reader, then connect it. A pick that fails goes back to the form with a note. */
+  async surprise(pick: () => Promise<{ start: string; target: string }>): Promise<void> {
+    const seq = ++this.seq;
+    this.host.mark(null);
+    this.set({ step: 'picking' });
+    let pair: { start: string; target: string };
+    try {
+      pair = await pick();
+    } catch {
+      if (seq === this.seq) this.set({ step: 'form', from: '', to: '', note: 'Could not pick a pair just now. Try again, or type two articles.' });
+      return;
+    }
+    if (seq === this.seq) await this.run(pair.start, pair.target);
   }
 
   /** Walk the chain again from its first article. */

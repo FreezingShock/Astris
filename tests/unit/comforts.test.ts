@@ -1,5 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Discovery, PREVIEW_DELAY, Share, StarCursor, Tip, announce, firstLine, nextStar, previewHtml, readShare, shareNote, shareSearch, shareUrl } from '../../src/comforts';
+import {
+  Discovery,
+  PREVIEW_DELAY,
+  Share,
+  StarCursor,
+  Tip,
+  tieLine,
+  announce,
+  firstLine,
+  nextStar,
+  previewHtml,
+  readShare,
+  shareNote,
+  shareSearch,
+  shareUrl,
+} from '../../src/comforts';
 import type { DiscoveryStore, ShareState, StarReach, SummarySource } from '../../src/comforts';
 import type { Con, StarNode } from '../../src/engine';
 import type { ArticleSummary, Constellation, Star } from '../../src/types';
@@ -370,5 +385,13 @@ describe('share links', () => {
       expect(replaced).toEqual(['/play?a=Brutalist%20architecture']);
       expect(toasts).toEqual(['Could not reach the clipboard. Copy the link from the address bar.']);
     });
+  });
+});
+
+describe('tieLine', () => {
+  it('puts a tie in plain words', () => {
+    expect(tieLine({ linksOut: true, linksIn: true, nameMatch: false, rank: 2 }, 'Bridge')).toBe('Close tie: links both ways with Bridge');
+    expect(tieLine({ linksOut: true, linksIn: false, nameMatch: true, rank: 3 }, 'Bridge')).toBe('Fair tie: is linked from Bridge, and a similar name');
+    expect(tieLine({ linksOut: false, linksIn: false, nameMatch: true, rank: 5 }, null)).toBe('Loose tie: has a name like this article');
   });
 });

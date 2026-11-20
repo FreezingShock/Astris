@@ -13,6 +13,23 @@ export function relations(o: Pick<Star, 'linksOut' | 'linksIn' | 'nameMatch'>): 
   return a.join(' · ');
 }
 
+/** The strength of a tie in words, from its rank. */
+export function tieWord(rank: number): string {
+  return rank <= 2 ? 'Close tie' : rank === 3 ? 'Fair tie' : 'Loose tie';
+}
+
+/** One plain sentence saying how a star connects to the article at the centre. */
+export function tieLine(o: Pick<Star, 'linksOut' | 'linksIn' | 'nameMatch' | 'rank'>, centre: string | null): string {
+  const to = centre ? ' ' + centre : ' this article';
+  let how: string;
+  if (o.linksOut && o.linksIn) how = 'links both ways with' + to;
+  else if (o.linksOut) how = 'is linked from' + to;
+  else if (o.linksIn) how = 'links to' + to;
+  else how = 'has a name like' + to;
+  if (o.nameMatch && (o.linksOut || o.linksIn)) how += ', and a similar name';
+  return tieWord(o.rank) + ': ' + how;
+}
+
 /** Where the preview text comes from. The data provider's summary() fits. */
 export type SummarySource = (title: string, signal?: AbortSignal) => Promise<ArticleSummary>;
 
@@ -63,6 +80,10 @@ export class Tip {
     private readonly isTarget: (title: string) => boolean = () => false,
     /** Summaries for the preview. Without it the card shows only the star's own facts. */
     private readonly summary?: SummarySource,
+    /** The article at the centre of the map, so a tie can be put in words. */
+    private readonly centre: () => string | null = () => null,
+    /** True for articles the reader has already been to. */
+    private readonly seen: (title: string) => boolean = () => false,
   ) {}
 
   show(target: PickTarget | null, p: Point, width: number, height: number): void {
@@ -86,10 +107,9 @@ export class Tip {
         swatch(o.subject) +
         ' ' +
         esc(o.subject) +
-        ' · rank ' +
-        o.rank +
+        (this.seen(o.title) ? ' · visited' : '') +
         '<br>' +
-        relations(o) +
+        esc(tieLine(o, this.centre())) +
         (this.isTarget(o.title) ? " · <b style='display:inline;font-size:inherit;font-family:inherit;color:var(--rank-1)'>your target</b>" : '') +
         '</span>';
     } else {
