@@ -98,7 +98,7 @@
     radial-gradient(50% 100% at 20% 100%, rgba(var(--g1), 0.5), transparent 70%), radial-gradient(45% 100% at 62% 100%, rgba(var(--g2), 0.42), transparent 70%),
     radial-gradient(40% 100% at 94% 100%, rgba(var(--g3), 0.36), transparent 70%);
   filter: blur(14px);
-  opacity: calc(var(--splotch-a) * 3);
+  opacity: min(1, calc(var(--splotch-a) * 4.2));
 }
 /* the star ornament: the logo's four-point star, tucked in a corner */
 .box::after {
@@ -122,13 +122,13 @@
   background: var(--sheen), var(--hero-wash), var(--surface);
 }
 .welcome::before {
-  inset: auto -8% -42% -8%;
-  height: 100%;
-  opacity: min(1, calc(var(--splotch-a) * 4.4));
+  inset: auto -8% -14% -8%;
+  height: 90%;
+  opacity: 1;
   background:
-    radial-gradient(38% 80% at 16% 100%, rgba(var(--neb-blue-rgb), 0.95), transparent 70%), radial-gradient(34% 90% at 50% 105%, rgba(var(--neb-violet-rgb), 0.9), transparent 70%),
-    radial-gradient(36% 80% at 86% 100%, rgba(var(--neb-rose-rgb), 0.85), transparent 70%);
-  filter: blur(30px);
+    radial-gradient(38% 80% at 16% 78%, rgba(var(--neb-blue-rgb), 0.95), transparent 70%), radial-gradient(34% 90% at 50% 88%, rgba(var(--neb-violet-rgb), 0.9), transparent 70%),
+    radial-gradient(36% 80% at 86% 78%, rgba(var(--neb-rose-rgb), 0.85), transparent 70%);
+  filter: blur(26px) saturate(1.5);
   animation: splotch-drift calc(var(--t-gradient-flow) * 2) ease-in-out infinite alternate;
   will-change: transform;
 }
@@ -259,7 +259,7 @@
     inset 0 0 0 1px rgba(var(--white-rgb), 0.03),
     0 18px 48px -16px rgba(0, 0, 0, 0.72),
     0 0 46px -18px rgba(var(--g1), 0.55);
-  --splotch-a: 0.17;
+  --splotch-a: 0.3;
 }
 #panel {
   --g1: var(--neb-blue-rgb);
@@ -315,6 +315,75 @@
 }
 .gsugg li.on {
   box-shadow: inset 2px 0 0 var(--link);
+}
+
+/* ---------- features: finish card, stats tiles, Connect two, daily streak, rule chips, difficulty ---------- */
+#hud .chip {
+  background: linear-gradient(180deg, rgba(var(--white-rgb), 0.09), rgba(var(--white-rgb), 0.02));
+  border-color: var(--night-line);
+  box-shadow: inset 0 1px 0 rgba(var(--white-rgb), 0.16);
+  transition:
+    box-shadow var(--dur-base) ease,
+    color var(--dur-fast) ease,
+    transform var(--dur-base) var(--ease-spring);
+}
+#hud .chip:hover:not(:disabled),
+#hud .chip[aria-pressed='true'] {
+  background: radial-gradient(120% 140% at 50% 120%, rgba(var(--g3), 0.4), rgba(var(--g2), 0.12) 60%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--white-rgb), 0.22),
+    0 0 18px -2px rgba(var(--g3), 0.65);
+  transform: translateY(-1px);
+}
+#hud .pair input {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(var(--white-rgb), 0.05));
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+#hud .chain li {
+  text-shadow: 0 0 12px rgba(var(--g2), 0.4);
+}
+#hud .score .stars {
+  text-shadow:
+    0 0 10px rgb(var(--g3)),
+    0 0 22px rgba(var(--g3), 0.6);
+}
+#hud .cal i {
+  border-radius: 50%;
+  background: rgba(var(--white-rgb), 0.18);
+  opacity: 1;
+}
+#hud .cal i.on {
+  background: radial-gradient(circle, var(--star-core), rgb(var(--g3)));
+  box-shadow: 0 0 7px 1px rgba(var(--g3), 0.8);
+}
+#hud.win {
+  --splotch-a: 0.5;
+  --g1: var(--neb-rose-rgb);
+  --g2: var(--neb-violet-rgb);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--white-rgb), 0.22),
+    0 0 0 1px rgba(var(--neb-rose-rgb), 0.8),
+    0 0 60px -4px rgba(var(--neb-rose-rgb), 0.55),
+    0 0 120px -20px rgba(var(--neb-violet-rgb), 0.5);
+}
+.tile .v {
+  font-family: var(--serif);
+  background: linear-gradient(120deg, var(--ink), rgb(var(--g1)) 80%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.tile .k {
+  font-family: var(--serif);
+  font-style: italic;
+}
+.recent th {
+  font-family: var(--serif);
+  font-weight: 500;
+}
+#hud .btn,
+#hud .lk.go {
+  text-shadow: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
