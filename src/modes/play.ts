@@ -1,15 +1,21 @@
 import type { ArticleSummary, Constellation, DataProvider, Suggestion } from '../types';
-import { clock, esc } from '../lib';
-import { replay, subjectRgb } from '../styles';
+import { esc } from '../lib';
+import { prefersReducedMotion, replay, subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
-import { Discovery, Share, Tip, firstLine, initKeyboard } from '../comforts';
+import { Atlas, Collection } from '../sky';
+import { Celebration, Discovery, Share, Sound, Tip, Tour, firstLine, initKeyboard, tierOf } from '../comforts';
 import { Connect, connectHtml, type ConnectState } from './connect';
-import { dailyPair, recent, saveDaily, shareText, streak } from './daily';
-import { savedLevel, saveLevel, LEVELS, type Level } from './difficulty';
+import { dailyPair, dayOf, recent, saveDaily, shareText, streak } from './daily';
+import { recordRun } from './stats';
+import { ratingPar, savedLevel, saveLevel, LEVELS, type Level } from './difficulty';
 import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
-import { UNREACHABLE_NOTE, failureOf } from './failure';
+import { diagnose } from '../data';
+import { Journey, JourneyStore, browserStorage, decodePath, savedCon, type JourneyRecord } from '../journey';
+import { OutageScreen } from './outage';
 import { legendHtml, panelHtml, suggestNext } from './panel';
-import { PICKING_HTML, beginRace, hudHtml, levelOf, par, randomPair, stepRace, type Pair, type Race } from './race';
+import { graphOf, route } from './graph';
+import { NO_RULES, REVEAL_BUDGET, loadRules, refusal, revealText, saveRules, type Rules } from './rules';
+import { PAR_BEAM, PAR_DEPTH, PICKING_HTML, beginRace, clockText, expire, hudHtml, levelOf, solvePar, randomPair, stepRace, type Pair, type Race } from './race';
 
 export type Mode = 'explore' | 'race' | 'daily' | 'connect' | 'drift';
 
@@ -24,6 +30,8 @@ export interface SourceCopy {
 }
 
 const DEFAULT_ARTICLE = 'Architecture';
+/** How long the pointer rests on a star before its article is fetched ahead of a click. */
+const WARM_DWELL_MS = 350;
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -48,13 +56,32 @@ export class Play {
   private ahead: Promise<Pair> | null = null;
   private readonly connect: Connect;
   private readonly discovery = new Discovery();
+  private readonly collection = new Collection();
+  private atlas: Atlas | null = null;
   private readonly tip: Tip;
   private readonly share: Share;
+  private readonly sound = new Sound();
+  private readonly fx: Celebration;
+  private readonly tour: Tour;
   private seq = 0;
+  /** The journey of this tab: every centre visited in Explore, saved so that a refresh rebuilds the map. */
+  private readonly journey: Journey;
+  private readonly journeys = new JourneyStore(browserStorage());
+  private restoreSeq = 0;
+  /** True while a saved or shared journey is being replayed onto the map. */
+  private restoring = false;
+  private resume: HTMLButtonElement | null = null;
+  private warmTimer = 0;
+  private readonly warmed = new Set<string>();
   private driftTimer = 0;
   private driftSeen: string[] = [];
   private toastTimer = 0;
+  private readonly outage: OutageScreen;
   private found: Suggestion[] = [];
+  /** The text `found` was fetched for. Suggestions for older text are stale and must not answer Enter. */
+  private foundFor = '';
+  /** The suggestion request now running, so Enter can wait for it instead of taking a stale list. */
+  private settle: Promise<void> = Promise.resolve();
   private sel = 0;
   private suggestSeq = 0;
   private summary: ArticleSummary | null = null;
@@ -66,6 +93,7 @@ export class Play {
     private readonly copy: SourceCopy,
     private readonly isOpen: () => boolean,
   ) {
+    this.journey = new Journey(this.journeys);
     this.tip = new Tip(
       $('tip'),
       (title) => !!this.race && !this.race.done && title === this.race.target,
@@ -78,15 +106,32 @@ export class Play {
         this.stopDrift();
         void this.navigate(title);
       },
-      onHover: (target, p, w, h) => this.tip.show(target, p, w, h),
+      onHover: (target, p, w, h) => {
+        this.tip.show(target, p, w, h);
+        this.warm(target && target.kind === 'star' ? target.node.title : null);
+      },
       onChange: (cur) => this.changed(cur),
       onTravel: (title, now) => this.travelled(title, now),
       onFrame: (stats, now) => {
         $('gstat').textContent =
-          stats.stars + ' stars · ' + stats.memories + (stats.memories === 1 ? ' memory' : ' memories') + ' · ' + this.discovery.label + ' · ' + this.copy.status;
+          stats.stars +
+          ' stars · ' +
+          (stats.memories + 1) +
+          (stats.memories + 1 === 1 ? ' centre' : ' centres') +
+          ' · ' +
+          this.discovery.label +
+          ' · ' +
+          this.copy.status +
+          this.perf();
         if (this.race && !this.race.done) {
+          // The clock sits in a live region, so it is hidden from screen readers and written only when the second changes.
           const t = document.getElementById('rt');
-          if (t) t.textContent = clock(now - this.race.t0);
+          const text = clockText(this.race, now);
+          if (t && t.textContent !== text) t.textContent = text;
+          if (expire(this.race, now)) {
+            this.engine.markerTitle = null;
+            this.hud();
+          }
         }
       },
     });
@@ -99,12 +144,15 @@ export class Play {
       },
       onMap: this.isOpen,
       toast: (message) => this.toast(message),
+      journey: () => ({ id: this.journey.id, token: this.journey.token, steps: this.journey.steps }),
     });
+    this.fx = new Celebration($('play'));
+    this.tour = new Tour({ host: $('play'), canvas: $('sky'), search: this.gq, onRace: () => void this.newRace() });
     this.connect = new Connect({
       provider: this.provider,
       current: () => this.engine.current?.title ?? null,
       open: async (title) => {
-        const data = await this.load(title);
+        const data = await this.load(title, (d) => this.reset(d), false);
         if (data) this.reset(data);
         return data ? data.center.title : null;
       },
@@ -118,6 +166,7 @@ export class Play {
       render: (state) => this.connectCard(state),
       wait: (ms) => new Promise((done) => window.setTimeout(done, ms)),
     });
+    this.outage = new OutageScreen($('outage'), { home: () => $('play').querySelector<HTMLElement>('.logo')?.click(), random: () => void this.surprise() });
     this.bind();
   }
 
@@ -125,18 +174,36 @@ export class Play {
   enter(): void {
     this.engine.enable();
     this.share.sync();
+    this.offerResume();
     if (!this.engine.current) void this.open(DEFAULT_ARTICLE, false);
+    // The tutorial greets a first visit to the plain map, never a shared link.
+    if (!this.tour.seen && !this.tour.open && !location.search) this.tour.start();
+  }
+
+  /** Keep where the view is with this tab's journey. */
+  private saveView(): void {
+    // While a travel is loading the camera is leaning in, so its zoom is not one worth keeping.
+    if (this.restoring || !this.engine.current || this.engine.loading) return;
+    const v = this.engine.view;
+    this.journey.setView(v.x, v.y, v.z);
   }
 
   /** The map route closed. */
   leave(): void {
+    this.saveView();
+    this.atlas?.close(false);
     this.engine.disable();
   }
 
   /** Start over from one article, in Explore unless told otherwise. */
   async open(title: string, explore = true): Promise<void> {
-    if (explore) this.setMode('explore');
-    const data = await this.load(title);
+    this.atlas?.close(false);
+    if (explore) {
+      this.setMode('explore');
+      this.hideResume();
+    }
+    this.cancelRestore();
+    const data = await this.load(title, (d) => this.reset(d));
     if (data) this.reset(data);
   }
 
@@ -145,21 +212,40 @@ export class Play {
     const cur = this.engine.current;
     if (!cur) return this.open(title, false);
     if (title === cur.title) return;
-    const data = await this.load(title);
-    if (!data) return;
-    this.discovery.note(data);
-    this.engine.travel(data);
+    const race = this.race;
+    if (race && !race.done) {
+      const subject = cur.nodes.find((n) => n.title === title)?.subject;
+      const why = refusal(race.rules, title, race.target, subject, race.seen, race.revisits);
+      if (why) return this.toast(why);
+    }
+    // a centre already on the map opens at once; a new one starts moving on this frame and loads on the way
+    if (this.engine.revisit(title)) return;
+    const begun = this.engine.begin(title);
+    const go = (d: Constellation): void => {
+      this.collect(d);
+      this.recordStep(d);
+      this.engine.travel(d);
+    };
+    this.cancelRestore();
+    const data = await this.load(title, go);
+    if (data) go(data);
+    else if (begun) this.engine.abort(title);
   }
 
   /** Travel to a random article, leaving a race if one is running. */
   async surprise(): Promise<void> {
+    this.atlas?.close(false);
     const cur = this.engine.current;
     let t: string;
     let n = 0;
-    do {
-      t = await this.provider.random();
-      n++;
-    } while (cur && t === cur.title && n < 20);
+    try {
+      do {
+        t = await this.provider.random();
+        n++;
+      } while (cur && t === cur.title && n < 20);
+    } catch (err) {
+      return this.report(err, () => this.surprise());
+    }
     if (this.mode !== 'explore') this.setMode('explore');
     if (cur) {
       this.clearSearch();
@@ -168,18 +254,29 @@ export class Play {
   }
 
   /** Start a race between two articles. Par is searched for in the background unless it is already known. */
-  async startRace(start: string, target: string, knownPar?: number, day?: number, hard = false, level?: Level): Promise<void> {
+  async startRace(
+    start: string,
+    target: string,
+    knownPar?: number,
+    day?: number,
+    hard = false,
+    rules: Rules = day === undefined ? loadRules() : NO_RULES,
+    level?: Level,
+  ): Promise<void> {
+    this.atlas?.close(false);
+    this.hideResume();
+    this.cancelRestore();
     const seq = ++this.raceSeq;
     this.picking = false;
     this.setMode(day === undefined ? 'race' : 'daily');
-    const data = await this.load(start);
+    const data = await this.load(start, () => this.startRace(start, target, knownPar, day, hard, rules, level));
     if (seq !== this.raceSeq) return;
     if (!data) {
       if (!this.race) this.setMode('explore');
       return;
     }
     // The provider follows redirects, so race on the titles it actually uses.
-    const race = beginRace(data.center.title, target, knownPar ?? null, performance.now(), day, hard);
+    const race = beginRace(data.center.title, target, knownPar ?? null, performance.now(), day, hard, rules);
     if (level) race.level = level;
     this.race = race;
     this.engine.markerTitle = target;
@@ -197,14 +294,17 @@ export class Play {
       },
       () => undefined,
     );
-    if (knownPar !== undefined && level) return;
-    const found = knownPar ?? (await par(this.provider, race.start, target));
+    const found = await solvePar(this.provider, race.start, target);
     if (this.race !== race) return;
-    race.par = found;
+    if (found.par >= 0 || knownPar === undefined) {
+      race.par = found.par;
+      race.parExact = found.exact;
+    }
+    if (found.route) race.route = found.route;
     this.hud();
     // The rating needs the target's links, one more article to ask for, so it follows the par on the card.
     if (race.day !== undefined) return;
-    const rated = await levelOf(this.provider, race.target, found).catch(() => undefined);
+    const rated = await levelOf(this.provider, race.target, ratingPar(found)).catch(() => undefined);
     if (this.race !== race || !rated) return;
     race.level = rated;
     this.hud();
@@ -212,6 +312,7 @@ export class Play {
 
   /** Open Connect two, optionally with both articles already chosen. */
   async startConnect(from?: string, to?: string): Promise<void> {
+    this.atlas?.close(false);
     this.setMode('connect');
     this.connect.start();
     if (from && to) await this.connect.run(from, to);
@@ -219,6 +320,7 @@ export class Play {
 
   /** Start today's race: one pair a day, the same for every visitor. */
   async startDaily(hard = false): Promise<void> {
+    this.atlas?.close(false);
     const pair = dailyPair(undefined, hard);
     await this.startRace(pair.start, pair.target, undefined, pair.day, hard);
   }
@@ -271,12 +373,38 @@ export class Play {
     this.hud();
     try {
       const pair = await this.pair();
-      if (seq === this.raceSeq) await this.startRace(pair.start, pair.target, pair.par, undefined, false, pair.level);
-    } catch {
+      if (seq === this.raceSeq) await this.startRace(pair.start, pair.target, pair.par, undefined, false, undefined, pair.level);
+    } catch (err) {
       if (seq !== this.raceSeq) return;
       this.setMode('explore');
-      this.toast('Could not pick a race just now. Try again.');
+      await this.report(err, () => this.newRace());
     }
+  }
+
+  /** Turn a rule on or off. The same race starts over so the new rule applies from the first click. */
+  private async toggleRule(rule: keyof Rules): Promise<void> {
+    const race = this.race;
+    if (!race || race.day !== undefined) return;
+    const rules = { ...race.rules, [rule]: !race.rules[rule] };
+    saveRules(rules);
+    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, undefined, false, rules);
+  }
+
+  /** Reveal: spend one use to learn how far the target is from here and the first step to take. */
+  private async reveal(): Promise<void> {
+    const race = this.race;
+    const cur = this.engine.current;
+    if (!race || race.done || !cur || !race.reveals) return;
+    race.note = 'Looking for a route…';
+    this.hud();
+    const chain = await route(graphOf(this.provider), cur.title, race.target, { maxDepth: PAR_DEPTH, budget: REVEAL_BUDGET, beam: PAR_BEAM });
+    if (this.race !== race || race.done || this.engine.current !== cur) return;
+    if (chain) {
+      race.reveals--;
+      race.revealed++;
+    }
+    race.note = revealText(chain);
+    this.hud();
   }
 
   /** Copy the finished daily's result grid, which names neither article, to the clipboard. */
@@ -295,21 +423,27 @@ export class Play {
   async retryRace(): Promise<void> {
     const race = this.race;
     if (!race) return this.newRace();
-    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, race.day, race.hard, race.level);
+    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, race.day, race.hard, race.rules, race.level);
   }
 
   /** Drift: the map travels to a neighbouring article every few seconds until the reader acts. */
   startDrift(): void {
+    this.atlas?.close(false);
     this.setMode('drift');
     this.hud();
     const step = async (): Promise<void> => {
       const cur = this.engine.current?.title;
       if (cur) {
-        this.driftSeen = [...this.driftSeen.slice(-8), cur];
-        const next = nextStop(await this.provider.neighbours(cur).catch(() => []), this.driftSeen);
-        if (this.mode !== 'drift') return;
-        if (next) await this.navigate(next);
-        else await this.navigate(await this.provider.random());
+        try {
+          this.driftSeen = [...this.driftSeen.slice(-8), cur];
+          const next = nextStop(await this.provider.neighbours(cur).catch(() => []), this.driftSeen);
+          if (this.mode !== 'drift') return;
+          // A dead end or a failed lookup is not the end of the drift: it hops to a random article, or waits and tries again.
+          if (next) await this.navigate(next);
+          else await this.navigate(await this.provider.random());
+        } catch {
+          // Wikipedia hiccuped; the next tick tries again.
+        }
       }
       if (this.mode === 'drift') this.driftTimer = window.setTimeout(() => void step(), DRIFT_MS);
     };
@@ -322,8 +456,11 @@ export class Play {
   }
 
   setMode(m: Mode): void {
+    this.atlas?.close(false);
     if (m !== 'drift') clearTimeout(this.driftTimer);
     this.mode = m;
+    // Only Explore and Drift are saved. A race has a clock and a score, and Connect two walks a fixed chain; their own links already restart them.
+    if (m !== 'explore' && m !== 'drift') this.journey.detach();
     document.querySelectorAll<HTMLElement>('#modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
     if (m !== 'connect' && this.connect.state) {
       this.connect.stop();
@@ -351,34 +488,239 @@ export class Play {
 
   /** Tell the reader an article could not be found. */
   missing(query: string): void {
-    this.toast('No article called “' + query + '” ' + this.copy.missing + '.');
+    this.outage.show('missing', { query, keep: this.engine.current !== null });
   }
 
-  /** Fetch a constellation. Only the latest request wins; a failed one shows a note and returns null. */
-  private async load(title: string): Promise<Constellation | null> {
+  /**
+   * Resting on a star for a moment fetches its constellation ahead of the click, so that travelling there feels instant.
+   * The provider keeps what it fetched; one star at a time keeps within Wikipedia's rate limits.
+   */
+  private warm(title: string | null): void {
+    clearTimeout(this.warmTimer);
+    if (!title || title === this.engine.current?.title || this.warmed.has(title)) return;
+    this.warmTimer = window.setTimeout(() => {
+      this.warmed.add(title);
+      void this.provider.constellation(title).catch(() => undefined);
+    }, WARM_DWELL_MS);
+  }
+
+  /** With ?perf in the address: how long a frame takes to draw and how much detail is drawn. */
+  private perf(): string {
+    if (!location.search.includes('perf')) return '';
+    return ' · ' + this.engine.frameMs.toFixed(1) + ' ms/frame · detail ' + this.engine.detail;
+  }
+
+  /**
+   * Show the screen that matches why Wikipedia could not be reached, with `retry` to run again by itself.
+   * A cancelled request says nothing; a missing article gets its own screen without a retry.
+   */
+  async report(err: unknown, retry: () => Promise<void>, query = '', screenForMissing = true): Promise<void> {
+    const why = await diagnose(err);
+    if (why === 'cancelled') return;
+    if (why === 'missing') return screenForMissing ? this.missing(query) : this.toast('No article called “' + query + '” ' + this.copy.missing + '.');
+    this.outage.show(why, { retry, keep: this.engine.current !== null });
+  }
+
+  /** Put the outage screen away, for example once a request has worked. */
+  clearOutage(): void {
+    if (this.outage.open) this.outage.hide();
+  }
+
+  /**
+   * Fetch a constellation. Only the latest request wins; a failure shows its screen and returns null.
+   * When the screen's own retry gets the data later, `then` finishes the job the caller would have done.
+   */
+  private async load(title: string, then?: (data: Constellation) => void | Promise<void>, screenForMissing = true): Promise<Constellation | null> {
     const seq = ++this.seq;
-    try {
+    const fetchIt = async (): Promise<Constellation | null> => {
       const data = await this.provider.constellation(title);
+      this.clearOutage();
       return seq === this.seq ? data : null;
+    };
+    try {
+      return await fetchIt();
     } catch (err) {
-      const why = failureOf(err);
-      if (seq === this.seq && why === 'missing') this.missing(title);
-      else if (seq === this.seq && why === 'unreachable') this.toast(UNREACHABLE_NOTE);
+      if (seq === this.seq) {
+        await this.report(
+          err,
+          async () => {
+            const data = await fetchIt();
+            if (data) await then?.(data);
+          },
+          title,
+          screenForMissing,
+        );
+      }
       return null;
     }
   }
 
-  private reset(data: Constellation): void {
+  /** Count the constellation as discovered and add its centre to the sky map. */
+  private collect(data: Constellation): void {
     this.discovery.note(data);
+    const r = this.collection.visit(data.center.title, data.center.subject);
+    const said: string[] = [];
+    if (r.lit) said.push('New region lit: ' + r.lit);
+    for (const a of r.unlocked) said.push('Achievement: ' + a.name);
+    if (said.length) this.toast(said.join(' · '));
+    this.atlas?.refresh();
+  }
+
+  private reset(data: Constellation): void {
+    this.collect(data);
+    if (!this.restoring) {
+      if (this.mode === 'explore' || this.mode === 'drift') this.journey.begin(data);
+      else this.journey.detach();
+    }
     this.engine.reset(data);
   }
 
+  /** The reader acted while a journey was being rebuilt: stop the replay where it is. */
+  private cancelRestore(): void {
+    this.restoreSeq++;
+    this.restoring = false;
+  }
+
+  /** Add a visited centre to this tab's journey. */
+  private recordStep(data: Constellation): void {
+    if (this.restoring || (this.mode !== 'explore' && this.mode !== 'drift')) return;
+    this.journey.step(data);
+    if (this.journey.id) this.hideResume();
+  }
+
+  /* ---------- journeys: refresh, resume and shared links ---------- */
+
+  /**
+   * Act on the journey parts of a /play link: "?j=" is this browser's own saved journey and "?t=" is a path
+   * someone shared. Returns true when the journey took over; false lets the link's article or race open as usual.
+   */
+  openJourneyLink(query: URLSearchParams): boolean {
+    const token = query.get('t');
+    if (token !== null) {
+      const path = decodePath(token);
+      if (path) {
+        void this.restore(path, null);
+        return true;
+      }
+      this.notice('That journey link could not be read. Opening the map instead.');
+      return false;
+    }
+    const id = query.get('j');
+    if (id === null) return false;
+    const rec = this.journeys.load(id);
+    if (rec) {
+      void this.restore(rec.path, rec);
+      return true;
+    }
+    if (!query.has('a')) this.notice('That journey is not saved in this browser. Starting fresh.');
+    return false;
+  }
+
+  /**
+   * Rebuild a journey on the map: the first centre appears, then each later one in turn, just as it grew.
+   * A saved journey replays from what it kept, so it needs no network; a shared path fetches each centre in turn,
+   * at the provider's own pace. Anything the reader does meanwhile cancels the replay.
+   */
+  private async restore(path: readonly string[], rec: JourneyRecord | null): Promise<void> {
+    const mine = ++this.restoreSeq;
+    ++this.seq;
+    this.atlas?.close(false);
+    this.hideResume();
+    this.setMode('explore');
+    this.restoring = true;
+    const wait = prefersReducedMotion() ? 0 : Math.min(320, Math.floor(3200 / path.length));
+    const seen = new Map<string, Constellation>();
+    const shown: Constellation[] = [];
+    let skipped = 0;
+    let failed: string | null = null;
+    try {
+      for (const title of path) {
+        if (mine !== this.restoreSeq) return;
+        let data: Constellation | null | undefined = seen.get(title) ?? (rec ? savedCon(rec, title, Date.now()) : null);
+        if (!data) {
+          try {
+            data = await this.provider.constellation(title);
+          } catch (err) {
+            if (mine !== this.restoreSeq) return;
+            // An article that was renamed or deleted is skipped; anything else ends the replay where it got to.
+            if ((await diagnose(err)) === 'missing' && shown.length) {
+              skipped++;
+              continue;
+            }
+            if (!shown.length) {
+              this.restoring = false;
+              await this.report(err, () => this.restore(path, rec), title);
+              return;
+            }
+            failed = title;
+            break;
+          }
+          this.clearOutage();
+        }
+        if (mine !== this.restoreSeq) return;
+        seen.set(title, data);
+        const last = shown[shown.length - 1];
+        if (last && last.center.title === data.center.title) continue;
+        if (!shown.length) this.reset(data);
+        else {
+          if (wait) await new Promise((done) => window.setTimeout(done, wait));
+          if (mine !== this.restoreSeq) return;
+          this.collect(data);
+          this.engine.travel(data);
+        }
+        shown.push(data);
+      }
+    } finally {
+      if (mine === this.restoreSeq) this.restoring = false;
+    }
+    if (mine !== this.restoreSeq || !shown.length) return;
+    // Keep recording on the same journey when it is this browser's own and whole; a shared or partial one becomes a journey of its own.
+    if (rec && shown.length === path.length) this.journey.adopt(rec);
+    else this.journey.adoptPath(shown);
+    const cur = this.engine.current;
+    if (cur) this.changed(cur);
+    // A whole saved journey also brings back where the view was left, panned and zoomed.
+    const v = rec && shown.length === path.length ? rec.view : undefined;
+    if (v) this.engine.setView({ x: v[0], y: v[1], z: v[2] });
+    if (failed) this.toast('Wikipedia did not answer for “' + failed + '”. Rebuilt ' + shown.length + ' of ' + path.length + ' stops.');
+    else if (skipped) this.toast(skipped + (skipped === 1 ? ' article' : ' articles') + ' no longer exist and were skipped.');
+  }
+
+  /** A word about a link that did not work. It waits for the article's own arrival toasts, so that it is the one left on screen. */
+  private notice(message: string): void {
+    window.setTimeout(() => this.toast(message), 1600);
+  }
+
+  /** On a plain visit to the map, offer to pick up the last journey. It never starts one by itself. */
+  private offerResume(): void {
+    if (this.resume || location.search || this.engine.current) return;
+    const rec = this.journeys.latest(3);
+    if (!rec) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.id = 'resume';
+    b.className = 'gbtn';
+    b.textContent = 'Resume journey · ' + rec.path.length + ' stops';
+    b.title = 'Rebuild the journey you left, starting from ' + (rec.path[0] ?? '');
+    b.addEventListener('click', () => void this.restore(rec.path, rec));
+    ($('surprise').parentElement ?? $('play')).prepend(b);
+    this.resume = b;
+  }
+
+  private hideResume(): void {
+    this.resume?.remove();
+    this.resume = null;
+  }
+
   private changed(cur: Con): void {
+    const replaying = this.restoring;
     $('tint').style.color = 'rgb(' + subjectRgb(cur.subject) + ')';
     $('legend').innerHTML = legendHtml(cur);
     this.summary = null;
     this.panel(true);
     this.share.sync();
+    // A replay changes the centre many times in a second; only the last one asks for its summary.
+    if (replaying) return;
     const show = (s: ArticleSummary): void => {
       if (this.engine.current !== cur) return;
       this.summary = s;
@@ -400,6 +742,9 @@ export class Play {
   }
 
   private travelled(title: string, now: number): void {
+    if (this.restoring) return;
+    this.sound.arrive(title);
+    this.tour.advance('travel');
     const race = this.race;
     if (!race || race.done) return;
     if (stepRace(race, title, now)) {
@@ -410,9 +755,28 @@ export class Play {
         race.streak = streak(race.day);
         race.calendar = recent(race.day);
       }
+      race.result = recordRun({
+        day: dayOf(),
+        mode: race.day === undefined ? 'race' : 'daily',
+        start: race.start,
+        target: race.target,
+        clicks: race.clicks,
+        par: race.par,
+        time: race.time,
+        hints: race.revealed,
+      });
       this.prepare();
+      this.celebrate(race);
     }
     this.hud();
+  }
+
+  /** A burst of stars and a rising chime when a race ends; a better finish makes more of both. */
+  private celebrate(race: Race): void {
+    const tier = tierOf(race.clicks, race.par);
+    this.sound.win(tier);
+    this.hud();
+    this.fx.burst(tier, $('hud'), this.engine.current?.subject ?? 'Other');
   }
 
   private connectCard(state: ConnectState | null): void {
@@ -457,11 +821,13 @@ export class Play {
   private clearSearch(): void {
     this.gq.value = '';
     this.found = [];
+    this.foundFor = '';
     this.gs.classList.remove('open');
     this.gq.blur();
   }
 
   private choose(title: string): void {
+    this.atlas?.close(false);
     this.clearSearch();
     if (this.engine.current) void this.navigate(title);
   }
@@ -473,8 +839,10 @@ export class Play {
       // An empty box offers the best next stars, so a new direction is one click away.
       const cur = this.engine.current;
       this.found = cur ? suggestNext(cur.nodes, this.engine.visited) : [];
+      this.foundFor = '';
+      const fresh = !this.gs.classList.contains('open');
+      this.renderSuggestions('', fresh);
       this.gs.classList.toggle('open', this.found.length > 0);
-      this.renderSuggestions('');
       return;
     }
     let found: Suggestion[];
@@ -485,14 +853,19 @@ export class Play {
     }
     if (seq !== this.suggestSeq) return;
     this.found = found;
+    this.foundFor = q;
+    const fresh = !this.gs.classList.contains('open');
+    this.renderSuggestions(q, fresh);
     this.gs.classList.add('open');
-    this.renderSuggestions(q);
   }
 
-  private renderSuggestions(q: string): void {
+  /** Draw the list. `fresh` plays the staggered entrance, used only when the list opens, not on every keystroke. */
+  private renderSuggestions(q: string, fresh = false): void {
     const gs = this.gs;
+    gs.classList.toggle('fresh', fresh);
     if (!this.found.length) {
-      gs.innerHTML = "<li style='color:var(--space-redlink);cursor:default'>" + esc(q) + '<span>no such article ' + esc(this.copy.missing) + '</span></li>';
+      gs.innerHTML =
+        "<li class='none' role='option' aria-disabled='true'><span class='t'>" + esc(q) + "</span><span class='d'>no such article " + esc(this.copy.missing) + '</span></li>';
       return;
     }
     if (this.sel >= this.found.length) this.sel = 0;
@@ -501,9 +874,36 @@ export class Play {
         const t = s.title;
         const k = q ? t.toLowerCase().indexOf(q.toLowerCase()) : -1;
         const h = k >= 0 ? esc(t.slice(0, k)) + '<mark>' + esc(t.slice(k, k + q.length)) + '</mark>' + esc(t.slice(k + q.length)) : esc(t);
-        return "<li role='option' data-i='" + i + "' class='" + (i === this.sel ? 'on' : '') + "'>" + h + '<span>' + esc(s.description ?? '') + '</span></li>';
+        const d = s.description ? "<span class='d'>" + esc(s.description) + '</span>' : '';
+        return (
+          "<li role='option' data-i='" +
+          i +
+          "' style='--i:" +
+          Math.min(i, 8) +
+          "' aria-selected='" +
+          (i === this.sel) +
+          "' class='" +
+          (i === this.sel ? 'on' : '') +
+          "'>" +
+          "<span class='t'>" +
+          h +
+          '</span>' +
+          d +
+          '</li>'
+        );
       })
       .join('');
+  }
+
+  /** Move the highlight without rebuilding the list, so arrow keys and hover never replay the entrance. */
+  private select(i: number, scroll = false): void {
+    this.sel = i;
+    this.gs.querySelectorAll<HTMLElement>('li[data-i]').forEach((li) => {
+      const on = Number(li.dataset.i) === i;
+      li.classList.toggle('on', on);
+      li.setAttribute('aria-selected', String(on));
+      if (on && scroll) li.scrollIntoView({ block: 'nearest' });
+    });
   }
 
   /* ---------- wiring ---------- */
@@ -512,9 +912,11 @@ export class Play {
     const { gq, gs, engine } = this;
     gq.addEventListener('input', () => {
       this.sel = 0;
-      void this.suggest();
+      this.settle = this.suggest();
     });
-    gq.addEventListener('focus', () => void this.suggest());
+    gq.addEventListener('focus', () => {
+      this.settle = this.suggest();
+    });
     gq.addEventListener('blur', () => {
       setTimeout(() => gs.classList.remove('open'), 150);
     });
@@ -523,38 +925,78 @@ export class Play {
         gq.blur();
         return;
       }
-      if (!this.found.length) {
-        // Enter on text with no suggestion yet still tries the article: the provider follows redirects.
-        if (e.key === 'Enter' && gq.value.trim()) this.choose(gq.value.trim());
+      const typed = gq.value.trim();
+      if (e.key === 'Enter' && typed && (this.foundFor !== typed || !this.found.length)) {
+        // The list on screen belongs to older text. Wait for the suggestions for what was typed, then take the best one.
+        e.preventDefault();
+        void this.settle.then(() => {
+          const hit = this.foundFor === typed ? this.found[this.sel] : undefined;
+          if (gq.value.trim() === typed) this.choose(hit?.title ?? typed);
+        });
         return;
       }
-      if (e.key === 'ArrowDown') this.sel = (this.sel + 1) % this.found.length;
-      else if (e.key === 'ArrowUp') this.sel = (this.sel + this.found.length - 1) % this.found.length;
+      if (!this.found.length) return;
+      if (e.key === 'ArrowDown') this.select((this.sel + 1) % this.found.length, true);
+      else if (e.key === 'ArrowUp') this.select((this.sel + this.found.length - 1) % this.found.length, true);
       else if (e.key === 'Enter') {
         const hit = this.found[this.sel];
         if (hit) this.choose(hit.title);
         return;
       } else return;
       e.preventDefault();
-      this.renderSuggestions(gq.value.trim());
     });
     gs.addEventListener('mousedown', (e) => e.preventDefault());
+    gs.addEventListener('mousemove', (e) => {
+      const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-i]');
+      if (li && Number(li.dataset.i) !== this.sel) this.select(Number(li.dataset.i));
+    });
     gs.addEventListener('click', (e) => {
       const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-i]');
       const hit = li ? this.found[Number(li.dataset.i)] : undefined;
       if (hit) this.choose(hit.title);
     });
-    initKeyboard(gq, this.isOpen, { map: engine, go: (title) => void this.navigate(title) });
+    initKeyboard(gq, () => this.isOpen() && !this.atlas?.isOpen, { map: engine, go: (title) => void this.navigate(title) });
 
     document.addEventListener('keydown', (e) => {
       const t = e.target;
       const typing = t instanceof HTMLElement && (t.isContentEditable || t.matches('input, textarea, select, button, a'));
-      if (e.key === 'n' && this.isOpen() && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key === 'n' && this.isOpen() && !this.atlas?.isOpen && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         void this.newChain();
       }
     });
+    const atlas = new Atlas({ collection: this.collection, open: (title) => void this.open(title) });
+    this.atlas = atlas;
+    $('skyBtn').addEventListener('click', () => {
+      if (atlas.isOpen) return atlas.close();
+      if (this.tour.open) this.tour.finish();
+      atlas.open();
+    });
+    // The atlas is a sheet over the map: anything outside it, or Escape, puts it away.
+    document.addEventListener('pointerdown', (e) => {
+      const t = e.target;
+      if (atlas.isOpen && t instanceof Element && !t.closest('#atlas, #skyBtn')) atlas.close(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && atlas.isOpen) atlas.close();
+    });
+    this.gq.addEventListener('focus', () => atlas.close(false));
     $('surprise').addEventListener('click', () => void this.surprise());
+    const snd = $('snd');
+    const paintSound = (): void => {
+      snd.setAttribute('aria-pressed', String(this.sound.enabled));
+      snd.title = this.sound.enabled ? 'Sound is on' : 'Sound is off';
+      snd.setAttribute('aria-label', snd.title);
+    };
+    paintSound();
+    snd.addEventListener('click', () => {
+      this.sound.set(!this.sound.enabled);
+      paintSound();
+    });
+    $('tourbtn').addEventListener('click', () => {
+      this.atlas?.close(false);
+      this.tour.start();
+    });
     $('zin').addEventListener('click', () => engine.zoomBy(1.4));
     $('zout').addEventListener('click', () => engine.zoomBy(1 / 1.4));
     $('zfit').addEventListener('click', () => engine.fit());
@@ -589,6 +1031,8 @@ export class Play {
       const lv = (e.target as HTMLElement).closest<HTMLElement>('[data-level]')?.dataset.level;
       const picked = LEVELS.find((l) => l === lv);
       if (picked) return this.setLevel(picked);
+      const rule = (e.target as HTMLElement).closest<HTMLElement>('[data-rule]')?.dataset.rule;
+      if (rule === 'places' || rule === 'backtracks' || rule === 'blitz') return void this.toggleRule(rule);
       const hop = (e.target as HTMLElement).closest<HTMLElement>('[data-t]')?.dataset.t;
       if (hop) {
         this.connect.halt();
@@ -597,6 +1041,7 @@ export class Play {
       else if (id === 'cstop') this.connect.halt();
       else if (id === 'cnew') this.connect.start();
       else if (id === 'csurprise') void this.surprisePair();
+      else if (id === 'reveal') void this.reveal();
       else if (id === 'again') void this.newRace();
       else if (id === 'retry') void this.retryRace();
       else if (id === 'dtoggle') void this.startDaily(!this.race?.hard);
@@ -604,7 +1049,10 @@ export class Play {
       else if (id === 'quit') this.setMode('explore');
     });
 
+    // The view is saved only when the page is put away: a refresh, a closed tab or a tab switch.
+    window.addEventListener('pagehide', () => this.saveView());
     document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.saveView();
       if (document.hidden) engine.stop();
       else if (this.isOpen()) engine.kick();
     });

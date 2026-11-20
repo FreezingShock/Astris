@@ -90,9 +90,6 @@ body[data-view='play'] #panel {
 #hud.on {
   animation: m-rise var(--dur-base) var(--ease-out) both;
 }
-.gsugg.open {
-  animation: m-drop var(--dur-fast) var(--ease-out) both;
-}
 
 /* jumping to a heading or section: it lights up briefly so the eye finds it */
 .flash {

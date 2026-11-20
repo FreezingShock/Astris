@@ -5,7 +5,7 @@ import { DAILY_POOL, bestDaily, dailyPair, dayLabel, dayOf, played, recent, resu
 import { failureOf } from '../../src/modes/failure';
 import { Graph, graphOf, route } from '../../src/modes/graph';
 import { closest, suggestNext } from '../../src/modes/panel';
-import { PAR_BUDGET, beginRace, verdict, hudHtml, par, randomPair, stepRace } from '../../src/modes/race';
+import { PAR_BUDGET, beginRace, verdict, hudHtml, par, solvePar, randomPair, stepRace } from '../../src/modes/race';
 import { safeUrl, summaryHtml } from '../../src/modes/summary';
 import type { DataProvider } from '../../src/types';
 
@@ -252,7 +252,7 @@ describe('the daily race', () => {
     expect(saveDaily(day, { clicks: 6, time: 1000 }, store)).toEqual({ clicks: 5, time: 9000 });
     expect(saveDaily(day, { clicks: 5, time: 4000 }, store)).toEqual({ clicks: 5, time: 4000 });
     expect(bestDaily(day + 1, store)).toBeNull();
-    data.set('astris:daily:' + day, '{broken');
+    data.set('astris:stats:v1', '{broken');
     expect(bestDaily(day, store)).toBeNull();
     const blocked = {
       getItem: (): string | null => null,
@@ -512,7 +512,10 @@ describe('the race card hint', () => {
 
 describe('difficulty levels', () => {
   it('rates by clicks past two plus how thin the target is', async () => {
-    const { rate, obscurity, miss, savedLevel, saveLevel, walkSteps, levelPickerHtml } = await import('../../src/modes/difficulty');
+    const { rate, obscurity, miss, savedLevel, saveLevel, walkSteps, levelPickerHtml, ratingPar } = await import('../../src/modes/difficulty');
+    expect(ratingPar({ par: 4, lower: 2, exact: false })).toBe(3);
+    expect(ratingPar({ par: 4, lower: 4, exact: true })).toBe(4);
+    expect(ratingPar({ par: -1, lower: 2, exact: false })).toBe(-1);
     expect([obscurity(120), obscurity(60), obscurity(59), obscurity(12), obscurity(11), obscurity(0)]).toEqual([0, 0, 1, 1, 2, 2]);
     expect(rate(2, 100)).toBe('easy');
     expect(rate(3, 100)).toBe('easy');
@@ -564,5 +567,43 @@ describe('difficulty levels', () => {
     const easy = await avg('easy');
     const hard = await avg('hard');
     expect(hard).toBeGreaterThan(easy);
+  });
+});
+
+describe('solvePar', () => {
+  it('proves par and returns the route on the sample set', async () => {
+    const r = await solvePar(new SampleProvider(), 'Brutalist architecture', 'Jazz');
+    expect(r).toMatchObject({ par: 4, exact: true });
+    expect(r.route).toHaveLength(5);
+    expect(r.route?.[0]).toBe('Brutalist architecture');
+    expect(r.route?.[4]).toBe('Jazz');
+  });
+
+  it('agrees with a full breadth-first search across the sample set', async () => {
+    const titles = SampleProvider.titles;
+    for (let i = 0; i < titles.length; i += 9) {
+      const from = titles[i] ?? '';
+      const to = titles[(i * 5 + 3) % titles.length] ?? '';
+      const truth = await trueDistance(new SampleProvider(), from, to);
+      const r = await solvePar(new SampleProvider(), from, to);
+      if (truth >= 0 && truth <= 6) expect(r.par, from + ' to ' + to).toBe(truth);
+    }
+  });
+
+  it('drops a link the map does not offer and finds the next best chain', async () => {
+    // B lists A but A does not list B, so A to B is a link the solver sees from B's side only.
+    const p = fake({ A: ['C'], B: ['A', 'Z'], C: ['D'], D: ['Z'], Z: ['D'] });
+    const r = await solvePar(p, 'A', 'Z');
+    expect(r.route).toEqual(['A', 'C', 'D', 'Z']);
+    expect(r.par).toBe(3);
+  });
+
+  it('shows a route on the win card', () => {
+    const race = beginRace('A', 'Z', 2, 0);
+    race.route = ['A', 'B', 'Z'];
+    race.done = true;
+    expect(hudHtml(race)).toContain('Shortest route: A → B → Z');
+    race.parExact = false;
+    expect(hudHtml(race)).toContain('par ≤ 2');
   });
 });

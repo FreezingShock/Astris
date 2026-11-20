@@ -28,6 +28,14 @@ export function rate(par: number, targetLinks: number): Level {
   return p <= 1 ? 'easy' : p === 2 ? 'medium' : 'hard';
 }
 
+/**
+ * The par to rate a race by. A proven par is used as it is. When the solver only has an upper bound, the proven floor
+ * says how much lower the truth could be, so the rating uses the point halfway, rounded up.
+ */
+export function ratingPar(r: { par: number; lower: number; exact: boolean }): number {
+  return r.exact || r.par < 0 ? r.par : Math.ceil((Math.min(r.lower, r.par) + r.par) / 2);
+}
+
 /** How many clicks a walk takes when it looks for a pair of this level. */
 export function walkSteps(level: Level, rand: () => number): number {
   const coin = rand() < 0.5;

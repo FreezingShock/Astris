@@ -12,6 +12,8 @@ export const CACHE_TTL_MS = 60 * 60 * 1000;
 export const DEFAULT_BACKOFF_MS = 5000;
 const MAX_BACKOFF_MS = 60_000;
 const MAX_RETRIES = 2;
+/** A request that has not answered after this long is given up on, so a network that swallows requests shows up as a timeout. */
+export const REQUEST_TIMEOUT_MS = 15_000;
 const PREFIX = 'astris:';
 
 /** A response that was not 2xx. `status` is the HTTP status code. */
@@ -22,6 +24,28 @@ export class HttpError extends Error {
   ) {
     super('Request failed with status ' + status + ': ' + url);
     this.name = 'HttpError';
+  }
+}
+
+/** A 200 reply whose body is an API error such as a database hiccup. It is never cached. */
+export class ApiError extends Error {
+  constructor(
+    readonly code: string,
+    url: string,
+  ) {
+    super('The API answered with an error (' + code + '): ' + url);
+    this.name = 'ApiError';
+  }
+}
+
+/** A 200 reply that is not JSON, such as the sign-in page a captive portal serves in place of the API. */
+export class BadReplyError extends Error {
+  constructor(
+    readonly contentType: string,
+    url: string,
+  ) {
+    super('The reply was not JSON (' + (contentType || 'no content type') + '): ' + url);
+    this.name = 'BadReplyError';
   }
 }
 
@@ -37,12 +61,16 @@ export interface HttpOptions {
   wait?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** Called when the server asks for a pause, with the wait in milliseconds. */
   onThrottle?: (waitMs: number) => void;
+  /** How long one request may take, reply body included. Defaults to REQUEST_TIMEOUT_MS. */
+  timeoutMs?: number;
 }
 
 interface Entry {
   t: number;
   v: unknown;
 }
+
+const NOT_JSON = Symbol('not json');
 
 function abortError(signal?: AbortSignal): unknown {
   return signal?.reason ?? new DOMException('The request was aborted.', 'AbortError');
@@ -91,6 +119,7 @@ export class Http {
   private readonly storage: StorageLike | null;
   private readonly now: () => number;
   private readonly wait: (ms: number, signal?: AbortSignal) => Promise<void>;
+  private readonly timeoutMs: number;
   private readonly memory = new Map<string, Entry>();
   private readonly queue: (() => void)[] = [];
   private active = 0;
@@ -104,6 +133,7 @@ export class Http {
     this.now = options.now ?? Date.now;
     this.wait = options.wait ?? defaultWait;
     this.onThrottle = options.onThrottle;
+    this.timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
   }
 
   /** GET a URL as JSON. Cached for an hour unless `fresh` is set. */
@@ -127,13 +157,49 @@ export class Http {
     for (let attempt = 0; ; attempt++) {
       const pause = this.pausedUntil - this.now();
       if (pause > 0) await this.wait(pause, signal);
-      const res = await this.fetcher(url, signal ? { signal } : undefined);
-      if (res.ok) return (await res.json()) as unknown;
+      const { res, body } = await this.fetchJson(url, signal);
+      if (res.ok) {
+        if (body === NOT_JSON) throw new BadReplyError(res.headers.get('content-type') ?? '', url);
+        const err = typeof body === 'object' && body !== null ? (body as { error?: { code?: unknown } }).error : undefined;
+        if (err) throw new ApiError(typeof err.code === 'string' ? err.code : 'unknown', url);
+        return body;
+      }
       if ((res.status !== 429 && res.status !== 503) || attempt >= MAX_RETRIES) throw new HttpError(res.status, url);
       // Back off for everyone, not only this request, and wait longer each time it repeats.
       const waitMs = Math.min(MAX_BACKOFF_MS, retryAfterMs(res.headers.get('Retry-After'), this.now()) * 2 ** attempt);
       this.pausedUntil = Math.max(this.pausedUntil, this.now() + waitMs);
       this.onThrottle?.(waitMs);
+    }
+  }
+
+  /** One attempt: the reply and its body, inside the time limit. A body that is not JSON comes back as NOT_JSON. */
+  private async fetchJson(url: string, signal?: AbortSignal): Promise<{ res: Response; body: unknown }> {
+    if (signal?.aborted) throw abortError(signal);
+    const ctl = new AbortController();
+    let timedOut = false;
+    const stop = (): void => ctl.abort();
+    signal?.addEventListener('abort', stop, { once: true });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      ctl.abort();
+    }, this.timeoutMs);
+    try {
+      const res = await this.fetcher(url, { signal: ctl.signal });
+      let body: unknown = NOT_JSON;
+      if (res.ok) {
+        try {
+          body = (await res.json()) as unknown;
+        } catch (err) {
+          if (!(err instanceof SyntaxError)) throw err;
+        }
+      }
+      return { res, body };
+    } catch (err) {
+      if (timedOut && !signal?.aborted) throw new DOMException('Wikipedia did not answer in time.', 'TimeoutError');
+      throw err;
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', stop);
     }
   }
 
