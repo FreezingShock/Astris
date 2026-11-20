@@ -2,7 +2,7 @@ import type { ArticleSummary, Constellation, DataProvider, Suggestion } from '..
 import { clock, esc } from '../lib';
 import { subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
-import { Discovery, Tip, initKeyboard } from '../comforts';
+import { Discovery, Share, Tip, initKeyboard } from '../comforts';
 import { Connect, connectHtml, type ConnectState } from './connect';
 import { dailyPair, saveDaily } from './daily';
 import { UNREACHABLE_NOTE, failureOf } from './failure';
@@ -47,6 +47,7 @@ export class Play {
   private readonly connect: Connect;
   private readonly discovery = new Discovery();
   private readonly tip: Tip;
+  private readonly share: Share;
   private seq = 0;
   private toastTimer = 0;
   private found: Suggestion[] = [];
@@ -80,6 +81,16 @@ export class Play {
         }
       },
     });
+    this.share = new Share({
+      host: $('surprise').parentElement ?? $('play'),
+      state: () => {
+        const cur = this.engine.current;
+        if (this.race) return { mode: 'race', start: this.race.start, target: this.race.target };
+        return cur ? { mode: 'explore', article: cur.title } : null;
+      },
+      onMap: this.isOpen,
+      toast: (message) => this.toast(message),
+    });
     this.connect = new Connect({
       provider: this.provider,
       current: () => this.engine.current?.title ?? null,
@@ -104,6 +115,7 @@ export class Play {
   /** The map route opened. */
   enter(): void {
     this.engine.enable();
+    this.share.sync();
     if (!this.engine.current) void this.open(DEFAULT_ARTICLE, false);
   }
 
@@ -273,6 +285,7 @@ export class Play {
     $('legend').innerHTML = legendHtml(cur);
     this.summary = null;
     this.panel(true);
+    this.share.sync();
     const show = (s: ArticleSummary): void => {
       if (this.engine.current !== cur) return;
       this.summary = s;
@@ -318,6 +331,7 @@ export class Play {
 
   private hud(): void {
     const el = $('hud');
+    this.share.sync();
     if (this.connect.state) return;
     if (!this.race) {
       el.className = this.picking ? 'card on' : 'card';
