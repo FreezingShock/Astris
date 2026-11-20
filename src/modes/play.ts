@@ -191,12 +191,16 @@ export class Play {
       const why = refusal(race.rules, title, race.target, subject, race.seen, race.revisits);
       if (why) return this.toast(why);
     }
+    // a centre already on the map opens at once; a new one starts moving on this frame and loads on the way
+    if (this.engine.revisit(title)) return;
+    const begun = this.engine.begin(title);
     const go = (d: Constellation): void => {
       this.collect(d);
       this.engine.travel(d);
     };
     const data = await this.load(title, go);
     if (data) go(data);
+    else if (begun) this.engine.abort(title);
   }
 
   /** Travel to a random article, leaving a race if one is running. */

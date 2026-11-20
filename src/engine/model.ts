@@ -74,6 +74,8 @@ export interface Con {
   gone: boolean;
   /** Largest distance of any star from the centre, in unscaled units. Cleared when stars are dropped. */
   reach?: number;
+  /** True for a stand-in centre while its constellation loads: it draws the centre star and nothing else. */
+  pending?: boolean;
   /** Whether any of it was on screen in the last frame. */
   vis?: boolean;
   /** Screen position of the centre and number of stars drawn, set by the renderer. */

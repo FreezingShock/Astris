@@ -69,6 +69,8 @@ export class Engine {
   private readonly reduce = prefersReducedMotion();
   private readonly colors: { white: string; trail: string; title: string; strong: string; soft: string; visited: string };
   private cons: Con[] = [];
+  /** A travel that has started and is waiting for its constellation. */
+  private pending: { title: string; from: Con; con: Con; wasVisited: boolean } | null = null;
   private readonly world = new World(CONFIG.starGap);
   private readonly cam: Camera = { x: 0, y: 0, z: 1 };
   private readonly tgt: Camera = { x: 0, y: 0, z: 1 };
@@ -193,11 +195,28 @@ export class Engine {
    * Travelling to a centre visited before just moves the view there.
    */
   travel(data: Constellation): void {
-    const from = this.current;
     const title = data.center.title;
+    const p = this.pending;
+    if (p && p.title === title) {
+      // the stand-in becomes the real constellation, and its stars bloom in
+      const now = performance.now();
+      const con = makeCon(data, p.con.x, p.con.y, now, 0);
+      con.sc = CONFIG.childScale;
+      this.pending = null;
+      this.clear(con);
+      this.settle(con);
+      this.cons[this.cons.indexOf(p.con)] = con;
+      this.current = con;
+      this.trim(con);
+      this.events.onTravel?.(title, now);
+      this.events.onChange?.(con);
+      this.kick();
+      return;
+    }
+    if (p) this.abort();
+    const from = this.current;
     if (!from || title === from.title) return;
     const now = performance.now();
-    this.visited.add(from.title);
     let con = this.cons.find((c) => c.title === title && !c.gone);
     if (!con) {
       const at = this.world.get(title) ?? { x: from.x, y: from.y };
@@ -207,8 +226,69 @@ export class Engine {
       this.settle(con);
       this.cons.push(con);
     }
+    this.arrive(from, con, now);
+  }
+
+  /**
+   * Start travelling to a star at once, before its constellation has loaded: the star becomes the centre and the
+   * camera moves now. When travel() gets the data the stars bloom in; abort() undoes it if loading fails.
+   * Returns false when there is nothing to start (the star is not on the map, or it is a centre already visited).
+   */
+  begin(title: string): boolean {
+    if (this.pending) {
+      if (this.pending.title === title) return true;
+      this.abort();
+    }
+    const from = this.current;
+    if (!from || title === from.title || this.cons.some((c) => c.title === title && !c.gone)) return false;
+    const at = this.world.get(title);
+    if (!at) return false;
+    const subject = this.cons.flatMap((c) => c.nodes).find((n) => n.title === title)?.subject ?? from.subject;
+    const now = performance.now();
+    const con = makeCon({ center: { title, subject }, stars: [] }, at.x, at.y, now, 0);
+    con.sc = CONFIG.childScale;
+    con.pending = true;
+    this.pending = { title, from, con, wasVisited: this.visited.has(from.title) };
+    this.cons.push(con);
+    this.arrive(from, con, now, false);
+    return true;
+  }
+
+  /** Undo a begin() whose constellation did not load. With a title, only if that is the travel waiting. */
+  abort(title?: string): void {
+    const p = this.pending;
+    if (!p || (title !== undefined && p.title !== title)) return;
+    this.pending = null;
+    this.cons = this.cons.filter((c) => c !== p.con);
+    this.current = p.from;
+    this.trail.pop();
+    if (!p.wasVisited) this.visited.delete(p.from.title);
+    this.tgt.z = this.fitZ(p.from);
+    this.tgt.x = p.from.x + this.focusOffset();
+    this.tgt.y = p.from.y;
+    this.kick();
+  }
+
+  /** True when a centre visited before can be travelled to without loading anything. */
+  revisit(title: string): boolean {
+    const from = this.current;
+    const con = this.cons.find((c) => c.title === title && !c.gone);
+    if (!from || !con || con === from) return false;
+    if (this.pending) this.abort();
+    this.arrive(this.current ?? from, con, performance.now());
+    return true;
+  }
+
+  /** The travel waiting for its constellation, if any. */
+  get loading(): string | null {
+    return this.pending?.title ?? null;
+  }
+
+  /** Make a constellation the live one and move the camera to it. */
+  private arrive(from: Con, con: Con, now: number, announce = true): void {
+    this.visited.add(from.title);
     this.current = con;
-    this.trail.push(title);
+    this.trail.push(con.title);
     if (this.trail.length > CONFIG.trailLength) this.trail.shift();
     this.trim(con);
     const fit = this.fitZ(con);
@@ -217,8 +297,10 @@ export class Engine {
     this.tgt.y = con.y;
     this.hover = null;
     this.events.onHover?.(null, { x: 0, y: 0 }, this.W, this.H);
-    this.events.onTravel?.(title, now);
-    this.events.onChange?.(con);
+    if (announce) {
+      this.events.onTravel?.(con.title, now);
+      this.events.onChange?.(con);
+    }
     this.kick();
   }
 
