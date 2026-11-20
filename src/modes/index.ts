@@ -5,3 +5,4 @@ export type { Pair, Race } from './race';
 export { Graph, graphOf, route } from './graph';
 export { dailyPair, dayOf, dayLabel } from './daily';
 export type { DailyPair } from './daily';
+export { chainBetween } from './connect';
