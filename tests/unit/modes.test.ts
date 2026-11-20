@@ -4,7 +4,7 @@ import { Connect, chainBetween, connectHtml, type ConnectHost, type ConnectState
 import { DAILY_POOL, bestDaily, dailyPair, dayLabel, dayOf, saveDaily } from '../../src/modes/daily';
 import { failureOf } from '../../src/modes/failure';
 import { Graph, graphOf, route } from '../../src/modes/graph';
-import { closest } from '../../src/modes/panel';
+import { closest, suggestNext } from '../../src/modes/panel';
 import { PAR_BUDGET, beginRace, verdict, hudHtml, par, randomPair, stepRace } from '../../src/modes/race';
 import { safeUrl, summaryHtml } from '../../src/modes/summary';
 import type { DataProvider } from '../../src/types';
@@ -428,5 +428,18 @@ describe('the verdict on a finished race', () => {
     expect(verdict(2, 3)).toBe('1 under par, a shortcut');
     expect(verdict(4, null)).toBe('');
     expect(verdict(4, -1)).toBe('');
+  });
+});
+
+describe('what the search box offers when empty', () => {
+  it('lists the best unvisited stars with their ties', () => {
+    const nodes = [
+      { title: 'a', rank: 4, score: 1 },
+      { title: 'b', rank: 1, score: 2 },
+    ];
+    expect(suggestNext(nodes, new Set(['b']), 2)).toEqual([
+      { title: 'a', description: 'Loose tie' },
+      { title: 'b', description: 'Close tie' },
+    ]);
   });
 });

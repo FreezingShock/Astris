@@ -72,6 +72,7 @@
 }
 .gsearch {
   position: relative;
+  z-index: 5;
   flex: 1;
   min-width: 190px;
   max-width: 420px;
@@ -102,7 +103,7 @@
   left: 0;
   right: 0;
   top: 100%;
-  background: rgba(14, 16, 24, 0.96);
+  background: rgb(14, 16, 24);
   border: 1px solid var(--night-line);
   border-radius: 14px;
   box-shadow: var(--night-shadow);

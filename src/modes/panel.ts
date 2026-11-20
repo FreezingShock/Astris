@@ -1,4 +1,4 @@
-import type { ArticleSummary } from '../types';
+import type { ArticleSummary, Suggestion } from '../types';
 import { esc } from '../lib';
 import { swatch } from '../styles';
 import { relations, tieWord } from '../comforts';
@@ -11,6 +11,11 @@ export function closest<T extends { title: string; rank: number; score: number }
     .slice()
     .sort((a, b) => Number(visited.has(a.title)) - Number(visited.has(b.title)) || a.rank - b.rank || b.score - a.score)
     .slice(0, count);
+}
+
+/** What the search box offers before anything is typed: the best next stars, each with its tie in words. */
+export function suggestNext(nodes: readonly { title: string; rank: number; score: number }[], visited: ReadonlySet<string>, count = 6): Suggestion[] {
+  return closest(nodes, visited, count).map((n) => ({ title: n.title, description: tieWord(n.rank) }));
 }
 
 /** The article panel: the live constellation, in encyclopedia dress. */

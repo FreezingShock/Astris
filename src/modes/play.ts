@@ -7,7 +7,7 @@ import { Connect, connectHtml, type ConnectState } from './connect';
 import { dailyPair, saveDaily } from './daily';
 import { DRIFT_MS, nextStop } from './drift';
 import { UNREACHABLE_NOTE, failureOf } from './failure';
-import { legendHtml, panelHtml } from './panel';
+import { legendHtml, panelHtml, suggestNext } from './panel';
 import { PICKING_HTML, beginRace, hudHtml, par, randomPair, stepRace, type Pair, type Race } from './race';
 
 export type Mode = 'explore' | 'race' | 'daily' | 'connect' | 'drift';
@@ -422,8 +422,11 @@ export class Play {
     const q = this.gq.value.trim();
     const seq = ++this.suggestSeq;
     if (!q) {
-      this.found = [];
-      this.gs.classList.remove('open');
+      // An empty box offers the best next stars, so a new direction is one click away.
+      const cur = this.engine.current;
+      this.found = cur ? suggestNext(cur.nodes, this.engine.visited) : [];
+      this.gs.classList.toggle('open', this.found.length > 0);
+      this.renderSuggestions('');
       return;
     }
     let found: Suggestion[];
@@ -448,7 +451,7 @@ export class Play {
     gs.innerHTML = this.found
       .map((s, i) => {
         const t = s.title;
-        const k = t.toLowerCase().indexOf(q.toLowerCase());
+        const k = q ? t.toLowerCase().indexOf(q.toLowerCase()) : -1;
         const h = k >= 0 ? esc(t.slice(0, k)) + '<mark>' + esc(t.slice(k, k + q.length)) + '</mark>' + esc(t.slice(k + q.length)) : esc(t);
         return "<li role='option' data-i='" + i + "' class='" + (i === this.sel ? 'on' : '') + "'>" + h + '<span>' + esc(s.description ?? '') + '</span></li>';
       })
