@@ -503,19 +503,32 @@
 
 /* On a phone the race card sits under the Random article button, clear of the zoom buttons. */
 @media (max-width: 600px) {
+  .gbar {
+    gap: 8px;
+    padding: 8px 12px;
+  }
   .modes {
     max-width: 100%;
     overflow-x: auto;
     scrollbar-width: none;
+    font-size: 14px;
+  }
+  .modes button {
+    padding: 5px 9px;
   }
   .gbar .right {
     margin-left: 0;
+    gap: 8px;
+  }
+  .gbar .right .gbtn {
+    padding: 5px 12px;
+    font-size: 14px;
   }
   #play .gzoom {
-    top: 196px;
+    top: 152px;
   }
   #play #hud {
-    top: 196px;
+    top: 152px;
     left: 62px;
     right: 12px;
     transform: none;
