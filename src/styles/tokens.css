@@ -161,3 +161,36 @@
   --glass-line: rgba(255, 255, 255, 0.09);
   --card-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 18px 40px -18px rgba(0, 0, 0, 0.7);
 }
+
+/* surfaces: the shared depth, edge light and splotch glows that every card, box and menu draws from (see surfaces.css) */
+:root {
+  --splotch-a: 0.2; /* strength of the corner glows on the daytime site */
+  --edge-hi: rgba(255, 255, 255, 0.9); /* the lit top edge of a raised surface */
+  --edge-lo: rgba(60, 70, 120, 0.1);
+  --elev-1: 0 1px 1px rgba(30, 35, 70, 0.05), 0 4px 10px -4px rgba(30, 35, 90, 0.1);
+  --elev-2: 0 1px 2px rgba(30, 35, 70, 0.06), 0 10px 24px -10px rgba(30, 35, 90, 0.2), 0 28px 48px -28px rgba(60, 60, 160, 0.22);
+  --elev-3: 0 2px 4px rgba(30, 35, 70, 0.08), 0 18px 36px -12px rgba(30, 35, 90, 0.26), 0 40px 70px -30px rgba(80, 70, 190, 0.3);
+  --spec-rgb: var(--white-rgb);
+  --tilt: 5deg;
+  --g1: var(--neb-blue-rgb);
+  --g2: var(--neb-violet-rgb);
+  --g3: var(--neb-rose-rgb);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --splotch-a: 0.26;
+    --edge-hi: rgba(255, 255, 255, 0.11);
+    --edge-lo: rgba(0, 0, 0, 0.5);
+    --elev-1: 0 1px 1px rgba(0, 0, 0, 0.4), 0 4px 10px -4px rgba(0, 0, 0, 0.5);
+    --elev-2: 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 26px -10px rgba(0, 0, 0, 0.7), 0 30px 50px -30px rgba(var(--neb-violet-rgb), 0.28);
+    --elev-3: 0 2px 4px rgba(0, 0, 0, 0.5), 0 20px 40px -12px rgba(0, 0, 0, 0.75), 0 44px 70px -30px rgba(var(--neb-violet-rgb), 0.38);
+  }
+}
+:root[data-theme='dark'] {
+  --splotch-a: 0.26;
+  --edge-hi: rgba(255, 255, 255, 0.11);
+  --edge-lo: rgba(0, 0, 0, 0.5);
+  --elev-1: 0 1px 1px rgba(0, 0, 0, 0.4), 0 4px 10px -4px rgba(0, 0, 0, 0.5);
+  --elev-2: 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 26px -10px rgba(0, 0, 0, 0.7), 0 30px 50px -30px rgba(var(--neb-violet-rgb), 0.28);
+  --elev-3: 0 2px 4px rgba(0, 0, 0, 0.5), 0 20px 40px -12px rgba(0, 0, 0, 0.75), 0 44px 70px -30px rgba(var(--neb-violet-rgb), 0.38);
+}
