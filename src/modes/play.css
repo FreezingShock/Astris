@@ -218,17 +218,19 @@
   margin: 0;
   padding-bottom: 8px;
   border-bottom: 1px solid transparent;
-  border-image: var(--sweep) 1;
+  border-image: var(--sweep-flow) 1;
 }
 #panel h2 {
   font-family: var(--serif);
   font-weight: 400;
   margin: 20px 0 6px;
   font-family: var(--sans);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 8px;
+  color: var(--starlight);
+  background: linear-gradient(90deg, var(--tint-blue), var(--tint-violet) 60%, transparent);
 }
 #panel .sub {
   color: var(--muted);
@@ -346,8 +348,6 @@
 #hud .day {
   font-family: var(--mono);
   font-size: 11.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--muted);
 }
 #hud .line em {
@@ -510,6 +510,9 @@
   }
   .gbar .right {
     margin-left: 0;
+  }
+  #play .gzoom {
+    top: 196px;
   }
   #play #hud {
     top: 196px;

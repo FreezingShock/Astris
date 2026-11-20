@@ -105,6 +105,11 @@
   --t-logo-twinkle: 7s;
   --t-tint-shift: 1.4s;
   --t-nebula-drift: 46s;
+  --t-gradient-flow: 9s;
+  --t-glow-pulse: 5s;
+  --tint-blue: rgba(110, 163, 255, 0.14);
+  --tint-violet: rgba(164, 139, 245, 0.16);
+  --tint-rose: rgba(240, 138, 169, 0.14);
   /* the shared motion scale: every CSS transition and animation on the site draws from these, and src/styles/motion.ts reads the same names */
   --dur-fast: 140ms;
   --dur-base: 260ms;
@@ -131,6 +136,7 @@
     radial-gradient(70% 90% at 15% 0%, rgba(110, 163, 255, 0.2), transparent 70%), radial-gradient(60% 80% at 90% 20%, rgba(164, 139, 245, 0.18), transparent 70%),
     radial-gradient(50% 70% at 60% 110%, rgba(240, 138, 169, 0.14), transparent 70%);
   --sweep: linear-gradient(90deg, var(--neb-blue), var(--neb-violet), var(--neb-rose));
+  --sweep-flow: linear-gradient(90deg, var(--neb-blue), var(--neb-violet), var(--neb-rose), var(--neb-violet), var(--neb-blue));
   --focus-ring: 0 0 0 3px rgba(110, 163, 255, 0.35);
   /* the map's glass: always night */
   --night-glass: rgba(14, 16, 24, 0.72);
