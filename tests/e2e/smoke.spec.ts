@@ -38,3 +38,42 @@ test('a race link starts a race', async ({ page }) => {
   await expect(page.locator('#hud')).toContainText('par 4');
   await expect(page.locator('#modes [data-mode="race"]')).toHaveAttribute('aria-pressed', 'true');
 });
+
+test('the footer credits Wikipedia and names the licence', async ({ page }) => {
+  for (const path of ['/', '/design-system']) {
+    await page.goto(path);
+    const foot = page.locator('.vfoot');
+    await expect(foot).toContainText('built on Wikipedia');
+    await expect(foot).toContainText('not affiliated with or endorsed by the Wikimedia Foundation');
+    await expect(foot.locator('a[rel="license"]')).toHaveAttribute('href', 'https://creativecommons.org/licenses/by-sa/4.0/');
+  }
+});
+
+test('site links are real links and travel without a reload', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.vlinks a').first()).toHaveAttribute('href', '/play');
+  await page.locator('.vlinks a', { hasText: 'Design system' }).click();
+  await expect(page).toHaveURL(/\/design-system$/);
+  await expect(page.locator('#page-design-system')).toBeVisible();
+  await page.goBack();
+  await expect(page.locator('#page-main-page')).toBeVisible();
+});
+
+test('phone layout: the menu folds away and nothing overflows', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const path of ['/', '/design-system']) {
+    await page.goto(path);
+    await expect(page.locator('#vside')).toBeHidden();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    const dots = await page.locator('.spacecard').evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(dots).toBeLessThanOrEqual(0);
+  }
+  await page.locator('#menuBtn').click();
+  await expect(page.locator('#vside')).toBeVisible();
+  await expect(page.locator('#menuBtn')).toHaveAttribute('aria-expanded', 'true');
+});
+
+test('a shared article link opens that article', async ({ page }) => {
+  await page.goto('/play?a=Jazz');
+  await expect(page.locator('#panel h1')).toHaveText('Jazz');
+});
