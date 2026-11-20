@@ -26,6 +26,8 @@ export interface Race {
   t0: number;
   time: number;
   done: boolean;
+  /** One line about the target article, once it has been fetched. */
+  hint?: string;
   /** Set when this is the daily race: the day it belongs to. */
   day?: number;
   /** The reader's best finish for that day, once they have one. */
@@ -143,7 +145,9 @@ export function hudHtml(race: Race): string {
       esc(race.start) +
       ' → <em>' +
       esc(race.target) +
-      "</em></div><div class='stats'><span id='rc'>" +
+      '</em></div>' +
+      (race.hint ? "<div class='hint'>" + esc(race.hint) + '</div>' : '') +
+      "<div class='stats'><span id='rc'>" +
       race.clicks +
       " clicks</span><span id='rt'>00:00</span><span id='rp'>" +
       parText(race) +
