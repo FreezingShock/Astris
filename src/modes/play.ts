@@ -5,7 +5,8 @@ import { Engine, type Con } from '../engine';
 import { Atlas, Collection } from '../sky';
 import { Celebration, Discovery, Share, Sound, Tip, Tour, firstLine, initKeyboard, tierOf } from '../comforts';
 import { Connect, connectHtml, type ConnectState } from './connect';
-import { dailyPair, recent, saveDaily, shareText, streak } from './daily';
+import { dailyPair, dayOf, recent, saveDaily, shareText, streak } from './daily';
+import { recordRun } from './stats';
 import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
 import { UNREACHABLE_NOTE, failureOf } from './failure';
 import { legendHtml, panelHtml, suggestNext } from './panel';
@@ -455,6 +456,16 @@ export class Play {
         race.streak = streak(race.day);
         race.calendar = recent(race.day);
       }
+      race.result = recordRun({
+        day: dayOf(),
+        mode: race.day === undefined ? 'race' : 'daily',
+        start: race.start,
+        target: race.target,
+        clicks: race.clicks,
+        par: race.par,
+        time: race.time,
+        hints: race.revealed,
+      });
       this.prepare();
       this.celebrate(race);
     }

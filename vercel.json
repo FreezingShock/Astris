@@ -2,7 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "cleanUrls": true,
-  "rewrites": [{ "source": "/play", "destination": "/index.html" }],
+  "rewrites": [
+    { "source": "/play", "destination": "/index.html" },
+    { "source": "/stats", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/assets/(.*)",

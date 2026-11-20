@@ -1,6 +1,8 @@
 import type { DataProvider } from '../types';
 import { clock, esc } from '../lib';
 import { dayLabel, type DailyResult } from './daily';
+import { starsText } from './score';
+import type { Recorded } from './stats';
 import { solve, type LinkSource, type Solution } from '../data';
 import { graphOf, route } from './graph';
 import { BACKTRACKS, NO_RULES, REVEALS, ruleLabel, secondsLeft, type Rules } from './rules';
@@ -32,6 +34,8 @@ export interface Race {
   t0: number;
   time: number;
   done: boolean;
+  /** The score and personal bests of the finished run. */
+  result?: Recorded;
   /** One line about the target article, once it has been fetched. */
   hint?: string;
   rules: Rules;
@@ -254,6 +258,30 @@ function parText(race: Race): string {
   return race.par === null ? 'finding par…' : race.par < 0 ? 'par unknown' : (race.parExact === false ? 'par ≤ ' : 'par ') + race.par;
 }
 
+/** The score line of a finished race: stars, points, any personal best and the streak. */
+export function scoreHtml(race: Race): string {
+  const r = race.result;
+  if (!r) return '';
+  const badges: string[] = [];
+  if (r.records.points) badges.push('best score for this pair');
+  if (r.records.clicks) badges.push('fewest clicks yet');
+  if (r.records.time) badges.push('fastest yet');
+  const rating = r.score.stars === null ? '' : "<span class='stars' aria-label='" + r.score.stars + " of 3 stars'>" + starsText(r.score.stars) + '</span> ';
+  return (
+    "<div class='score'>" +
+    rating +
+    '<b>' +
+    r.score.points +
+    ' points</b>' +
+    (r.score.hintCost ? ' <span>(hints cost ' + r.score.hintCost + ')</span>' : '') +
+    (badges.length ? " <span class='pb'>New personal best: " + esc(badges.join(', ')) + '</span>' : '') +
+    "</div><div class='score'><span>" +
+    r.streak +
+    (r.streak === 1 ? ' day' : ' days') +
+    ' in a row</span> · <a href="/stats" data-go="stats">Your stats</a></div>'
+  );
+}
+
 /** The status card while a random pair is being picked. */
 export const PICKING_HTML = "<div class='line'>Picking two articles…</div><div class='stats'><button class='lk' type='button' id='quit'>Cancel</button></div>";
 
@@ -291,6 +319,8 @@ export function hudHtml(race: Race): string {
     (race.lost ? "<div class='line'>Time's up before <em>" : "<div class='line'>Arrived at <em>") +
     esc(race.target) +
     '</em></div>' +
+    (verdict(race.clicks, race.par) ? "<div class='line'>" + esc(verdict(race.clicks, race.par)) + '</div>' : '') +
+    scoreHtml(race) +
     (!race.lost && verdict(race.clicks, race.par) ? "<div class='line'>" + esc(verdict(race.clicks, race.par)) + '</div>' : '') +
     (race.route && race.route.length > 1
       ? "<div class='hint'>" + (race.parExact === false ? 'Shortest route found: ' : 'Shortest route: ') + race.route.map(esc).join(' → ') + '</div>'

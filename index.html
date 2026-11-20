@@ -48,14 +48,14 @@
       <button type="submit">Search</button>
     </form>
     <nav class="vlinks" aria-label="Site">
-      <a href="/play" data-go="play">Play</a><a href="/play?daily=1" data-race="1">Today's race</a>
+      <a href="/play" data-go="play">Play</a><a href="/play?daily=1" data-race="1">Today's race</a><a href="/stats" data-go="stats">Stats</a>
     </nav>
   </header>
 
   <div class="vbody">
     <nav class="vside" id="vside" aria-label="Main menu">
       <h3>Main menu</h3>
-      <ul><li><a href="/" data-go="main-page">Main page</a></li><li><a href="/play" data-go="play">Open the map</a></li><li><a href="/play?daily=1" data-race="1">Today's race</a></li><li><a href="/play" data-random="1">Random article</a></li></ul>
+      <ul><li><a href="/" data-go="main-page">Main page</a></li><li><a href="/play" data-go="play">Open the map</a></li><li><a href="/play?daily=1" data-race="1">Today's race</a></li><li><a href="/play" data-random="1">Random article</a></li><li><a href="/stats" data-go="stats">Your stats</a></li></ul>
       <h3>Modes</h3>
       <ul><li><a href="/play" data-go="play">Explore</a></li><li><a href="/play?daily=1" data-race="1">Race</a></li><li><a href="/play?connect=1" data-connect="1">Connect two</a></li><li><a href="/play?daily=1" data-race="1">Daily constellation</a></li><li><a href="/play?drift=1" data-drift="1">Drift</a></li></ul>
       <h3>Project</h3>
@@ -64,7 +64,7 @@
 
     <main class="vmain">
       <div class="vtabs">
-        <div><button type="button" data-go="main-page" id="tab-main-page">Main Page</button></div>
+        <div><button type="button" data-go="main-page" id="tab-main-page">Main Page</button><button type="button" data-go="stats" id="tab-stats">Stats</button></div>
         <div><button type="button" aria-current="page">Read</button><button type="button" data-go="play">Play</button></div>
       </div>
 
@@ -118,6 +118,13 @@
             </ul></div></div>
           </div>
         </div>
+      </section>
+
+      <!-- STATS -->
+      <section class="page" id="page-stats" aria-labelledby="stats-h">
+        <h1 id="stats-h" class="stats-h">Your stats</h1>
+        <p class="sub">Scores, stars and streaks from your races. They live in this browser only.</p>
+        <div id="statsBody"></div>
       </section>
 
     </main>
