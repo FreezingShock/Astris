@@ -5,7 +5,7 @@ import { Engine, type Con } from '../engine';
 import { Discovery, Share, Tip, firstLine, initKeyboard } from '../comforts';
 import { Connect, connectHtml, type ConnectState } from './connect';
 import { dailyPair, saveDaily } from './daily';
-import { DRIFT_MS, nextStop } from './drift';
+import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
 import { UNREACHABLE_NOTE, failureOf } from './failure';
 import { legendHtml, panelHtml, suggestNext } from './panel';
 import { PICKING_HTML, beginRace, hudHtml, par, randomPair, stepRace, type Pair, type Race } from './race';
@@ -269,7 +269,7 @@ export class Play {
   /** Drift: the map travels to a neighbouring article every few seconds until the reader acts. */
   startDrift(): void {
     this.setMode('drift');
-    this.toast('Drifting. Click a star or choose Explore to take over.');
+    this.hud();
     const step = async (): Promise<void> => {
       const cur = this.engine.current?.title;
       if (cur) {
@@ -389,15 +389,23 @@ export class Play {
   private async connectSuggest(input: HTMLInputElement): Promise<void> {
     const q = input.value.trim();
     const seq = ++this.suggestSeq;
-    const found = q ? await this.provider.suggest(q).catch(() => []) : [];
+    // An empty field offers the best next stars from the map, so a pair can be filled in without typing.
+    const cur = this.engine.current;
+    const found = q ? await this.provider.suggest(q).catch(() => []) : cur ? suggestNext(cur.nodes, this.engine.visited, 8) : [];
     const list = document.getElementById('clist');
-    if (list && seq === this.suggestSeq) list.innerHTML = found.map((f) => '<option value="' + esc(f.title) + '"></option>').join('');
+    if (list && seq === this.suggestSeq)
+      list.innerHTML = found.map((f) => '<option value="' + esc(f.title) + '"' + (f.description ? ' label="' + esc(f.description) + '"' : '') + '></option>').join('');
   }
 
   private hud(): void {
     const el = $('hud');
     this.share.sync();
     if (this.connect.state) return;
+    if (!this.race && this.mode === 'drift') {
+      el.className = 'card on';
+      el.innerHTML = DRIFT_HTML;
+      return;
+    }
     if (!this.race) {
       el.className = this.picking ? 'card on' : 'card';
       if (this.picking) el.innerHTML = PICKING_HTML;
@@ -532,6 +540,9 @@ export class Play {
       e.preventDefault();
       const data = new FormData(e.target as HTMLFormElement);
       void this.connect.run(String(data.get('from') ?? ''), String(data.get('to') ?? ''));
+    });
+    $('hud').addEventListener('focusin', (e) => {
+      if (e.target instanceof HTMLInputElement && !e.target.value) void this.connectSuggest(e.target);
     });
     $('hud').addEventListener('input', (e) => {
       if (e.target instanceof HTMLInputElement) void this.connectSuggest(e.target);
