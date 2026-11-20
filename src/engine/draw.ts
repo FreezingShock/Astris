@@ -9,6 +9,8 @@ export interface DrawOptions {
   pulses: number;
   /** The small constellation on the main page draws a smaller centre star. */
   mini?: boolean;
+  /** Share of the full centre-star size, for the centres of constellations already visited. */
+  centreScale?: number;
 }
 
 const TAU = Math.PI * 2;
@@ -59,11 +61,12 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
   for (const G of con.groups) {
     const ta = (CONFIG.threadAlpha[G.rank] ?? 0) * (g ? (G.rank <= CONFIG.memoryKeepRank ? con.dim : gfade) : con.dim);
     if (ta < CONFIG.threadCutoff) continue;
+    if (G.rank > CONFIG.dupThreadMaxRank && S < CONFIG.lodThreadZoom) continue;
     ctx.strokeStyle = 'rgba(' + subjectRgb(G.subject) + ',' + ta + ')';
     ctx.beginPath();
     for (const o of G.nodes) {
       const p = reduce ? 1 : ease((now - (o.born - CONFIG.threadDrawMs)) / CONFIG.threadDrawMs);
-      if (p <= 0 || (via && (o === via || o.par === via))) continue;
+      if (p <= 0 || (via && (o === via || o.par === via)) || (o.dup && o.rank > CONFIG.dupThreadMaxRank)) continue;
       const ax = o.par ? cx + o.par.dx * S : cx;
       const ay = o.par ? cy + o.par.dy * S : cy;
       const bx = cx + o.dx * S;
@@ -114,6 +117,7 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
       continue;
     }
     o.on = true;
+    if (o.dup) continue;
     const tw = reduce ? 1 : 1 + Math.sin(now * CONFIG.twinkleSpeed * o.sp + o.ph) * CONFIG.twinkleAmount;
     const d = (CONFIG.size[o.rank] ?? 0) * zs * s * tw * CONFIG.glowScale;
     ctx.globalAlpha = al * (CONFIG.starAlpha[o.rank] ?? 0) * Math.min(1, s);
@@ -153,6 +157,7 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
   const cs = reduce ? 1 : spring((now - con.born) / CONFIG.centrePopMs);
   const cd =
     (opt.mini ? CONFIG.centreSizeMini : CONFIG.centreSize) *
+    (opt.centreScale ?? 1) *
     zs *
     (CONFIG.centreGrowFrom + (1 - CONFIG.centreGrowFrom) * cs) *
     (reduce ? 1 : 1 + Math.sin(now * CONFIG.centreBreatheSpeed) * CONFIG.centreBreatheAmount);

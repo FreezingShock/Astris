@@ -79,6 +79,18 @@ export const CONFIG = {
   memoryDistance: 610,
   memoryMoveMs: 1150,
   maxMemories: 3,
+  /** The map grows: a new constellation is laid out at this share of full size, so that clusters pack close. */
+  childScale: 0.78,
+  /** The least distance between two stars of the map. */
+  starGap: 15,
+  /** Past this many stars the oldest outer stars are dropped, outermost first. */
+  maxWorldStars: 2600,
+  /** A visited centre is drawn at this share of the live centre's size. */
+  visitedCentreScale: 0.55,
+  /** Below this zoom the faint outer threads are not drawn. */
+  lodThreadZoom: 0.5,
+  /** Threads from rank-4 and rank-5 stars that were already on the map are not drawn. */
+  dupThreadMaxRank: 3,
   dissolveMs: 430,
   dissolveSpreadMs: 460,
   dissolveReach: 520,

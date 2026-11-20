@@ -23,6 +23,8 @@ export interface StarNode extends Star {
   gd: number;
   gux: number;
   guy: number;
+  /** True when the star was already on the map. It sits where the first one is and only adds a thread. */
+  dup?: boolean;
   /** Cached label widths. */
   wb?: number;
   ws?: number;

@@ -18,14 +18,14 @@ test('the map grows a constellation and travels', async ({ page }) => {
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto('/play');
   await expect(page.locator('#panel h1')).toHaveText('Architecture');
-  await expect(page.locator('#gstat')).toContainText('120 stars');
+  await expect(page.locator('#gstat')).toContainText('200 stars');
   await expect(page.locator('#panel .src a').first()).toHaveAttribute('href', 'https://en.wikipedia.org/wiki/Architecture');
   await expect(page.locator('#panel .src')).toContainText('CC BY-SA 4.0');
   await page.locator('#gq').fill('jaz');
   await expect(page.locator('#gsugg li').first()).toContainText('Jazz');
   await page.keyboard.press('Enter');
   await expect(page.locator('#panel h1')).toHaveText('Jazz');
-  await expect(page.locator('#gstat')).toContainText('1 memory');
+  await expect(page.locator('#gstat')).toContainText('2 centres');
   expect(errors).toEqual([]);
 });
 
