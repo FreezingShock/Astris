@@ -27,6 +27,8 @@ export interface SourceCopy {
 }
 
 const DEFAULT_ARTICLE = 'Architecture';
+/** How long the pointer rests on a star before its article is fetched ahead of a click. */
+const WARM_DWELL_MS = 350;
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -57,6 +59,8 @@ export class Play {
   private readonly fx: Celebration;
   private readonly tour: Tour;
   private seq = 0;
+  private warmTimer = 0;
+  private readonly warmed = new Set<string>();
   private driftTimer = 0;
   private driftSeen: string[] = [];
   private toastTimer = 0;
@@ -84,12 +88,23 @@ export class Play {
         this.stopDrift();
         void this.navigate(title);
       },
-      onHover: (target, p, w, h) => this.tip.show(target, p, w, h),
+      onHover: (target, p, w, h) => {
+        this.tip.show(target, p, w, h);
+        this.warm(target && target.kind === 'star' ? target.node.title : null);
+      },
       onChange: (cur) => this.changed(cur),
       onTravel: (title, now) => this.travelled(title, now),
       onFrame: (stats, now) => {
         $('gstat').textContent =
-          stats.stars + ' stars · ' + stats.memories + (stats.memories === 1 ? ' memory' : ' memories') + ' · ' + this.discovery.label + ' · ' + this.copy.status;
+          stats.stars +
+          ' stars · ' +
+          (stats.memories + 1) +
+          (stats.memories + 1 === 1 ? ' centre' : ' centres') +
+          ' · ' +
+          this.discovery.label +
+          ' · ' +
+          this.copy.status +
+          this.perf();
         if (this.race && !this.race.done) {
           const t = document.getElementById('rt');
           if (t) t.textContent = clockText(this.race, now);
@@ -395,6 +410,25 @@ export class Play {
   }
 
   /** Fetch a constellation. Only the latest request wins; a failed one shows a note and returns null. */
+  /**
+   * Resting on a star for a moment fetches its constellation ahead of the click, so that travelling there feels instant.
+   * The provider keeps what it fetched; one star at a time keeps within Wikipedia's rate limits.
+   */
+  private warm(title: string | null): void {
+    clearTimeout(this.warmTimer);
+    if (!title || title === this.engine.current?.title || this.warmed.has(title)) return;
+    this.warmTimer = window.setTimeout(() => {
+      this.warmed.add(title);
+      void this.provider.constellation(title).catch(() => undefined);
+    }, WARM_DWELL_MS);
+  }
+
+  /** With ?perf in the address: how long a frame takes to draw and how much detail is drawn. */
+  private perf(): string {
+    if (!location.search.includes('perf')) return '';
+    return ' · ' + this.engine.frameMs.toFixed(1) + ' ms/frame · detail ' + this.engine.detail;
+  }
+
   private async load(title: string): Promise<Constellation | null> {
     const seq = ++this.seq;
     try {

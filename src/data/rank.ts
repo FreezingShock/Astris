@@ -13,4 +13,4 @@ export function rankOf(linksOut: boolean, linksIn: boolean, nameMatch: boolean):
 }
 
 /** The most stars one constellation may hold. */
-export const MAX_STARS = 120;
+export const MAX_STARS = 200;
