@@ -4,7 +4,7 @@ import { subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
 import { Discovery, Tip, initKeyboard } from '../comforts';
 import { legendHtml, panelHtml } from './panel';
-import { hudHtml, par, randomPair, type Race } from './race';
+import { PICKING_HTML, beginRace, hudHtml, par, randomPair, stepRace, type Race } from './race';
 
 export type Mode = 'explore' | 'race';
 
@@ -40,6 +40,9 @@ export class Play {
   readonly engine: Engine;
   mode: Mode = 'explore';
   private race: Race | null = null;
+  /** Counts race starts, so a slow start that has been overtaken is dropped. */
+  private raceSeq = 0;
+  private picking = false;
   private readonly discovery = new Discovery();
   private readonly tip: Tip;
   private seq = 0;
@@ -126,26 +129,60 @@ export class Play {
     } else await this.open(t, false);
   }
 
+  /** Start a race between two articles. Par is searched for in the background unless it is already known. */
   async startRace(start: string, target: string, knownPar?: number): Promise<void> {
+    const seq = ++this.raceSeq;
+    this.picking = false;
     this.setMode('race');
-    const p = knownPar ?? (await par(this.provider, start, target));
     const data = await this.load(start);
-    if (!data || this.mode !== 'race') return;
-    this.race = { start, target, clicks: 0, par: p, t0: performance.now(), time: 0, done: false };
+    if (seq !== this.raceSeq) return;
+    if (!data) {
+      if (!this.race) this.setMode('explore');
+      return;
+    }
+    const race = beginRace(start, target, knownPar ?? null, performance.now());
+    this.race = race;
     this.engine.markerTitle = target;
     this.reset(data);
     this.hud();
+    if (knownPar !== undefined) return;
+    const found = await par(this.provider, start, target);
+    if (this.race !== race) return;
+    race.par = found;
+    this.hud();
   }
 
+  /** Start a race between a freshly picked random pair. */
   async newRace(): Promise<void> {
-    const pair = await randomPair(this.provider);
-    await this.startRace(pair.start, pair.target, pair.par);
+    const seq = ++this.raceSeq;
+    this.setMode('race');
+    this.race = null;
+    this.engine.markerTitle = null;
+    this.picking = true;
+    this.hud();
+    try {
+      const pair = await randomPair(this.provider);
+      if (seq === this.raceSeq) await this.startRace(pair.start, pair.target, pair.par);
+    } catch {
+      if (seq !== this.raceSeq) return;
+      this.setMode('explore');
+      this.toast('Could not pick a race just now. Try again.');
+    }
+  }
+
+  /** Run the current race again from its start. */
+  async retryRace(): Promise<void> {
+    const race = this.race;
+    if (!race) return this.newRace();
+    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined);
   }
 
   setMode(m: Mode): void {
     this.mode = m;
     document.querySelectorAll<HTMLElement>('#modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
     if (m !== 'race') {
+      this.raceSeq++;
+      this.picking = false;
       this.race = null;
       this.engine.markerTitle = null;
       this.hud();
@@ -212,19 +249,15 @@ export class Play {
   private travelled(title: string, now: number): void {
     const race = this.race;
     if (!race || race.done) return;
-    race.clicks++;
-    if (title === race.target) {
-      race.done = true;
-      race.time = now - race.t0;
-      this.engine.markerTitle = null;
-    }
+    if (stepRace(race, title, now)) this.engine.markerTitle = null;
     this.hud();
   }
 
   private hud(): void {
     const el = $('hud');
     if (!this.race) {
-      el.className = 'card';
+      el.className = this.picking ? 'card on' : 'card';
+      if (this.picking) el.innerHTML = PICKING_HTML;
       return;
     }
     el.className = 'card on' + (this.race.done ? ' win' : '');
@@ -339,6 +372,7 @@ export class Play {
     $('hud').addEventListener('click', (e) => {
       const id = (e.target as HTMLElement).id;
       if (id === 'again') void this.newRace();
+      else if (id === 'retry') void this.retryRace();
       else if (id === 'quit') this.setMode('explore');
     });
 
