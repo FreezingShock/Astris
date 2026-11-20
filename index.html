@@ -71,7 +71,7 @@
       <!-- MAIN PAGE -->
       <section class="page" id="page-main-page">
         <div class="welcome">
-          <div class="big">Welcome to <a href="/play" data-go="play">Astris</a>,</div>
+          <h1 class="big">Welcome to <a href="/play" data-go="play">Astris</a>,</h1>
           <div>the map of everything <a href="https://www.wikipedia.org/">Wikipedia</a> connects.</div>
           <div class="sub" style="margin:4px 0 0">Search any article. Watch what it links to grow around it. Click a star to travel there.</div>
           <div class="cta"><button class="btn go" type="button" data-go="play">Open the map</button><button class="btn" type="button" data-race="1">Start today's race</button><button class="btn" type="button" data-random="1">Random article</button></div>
@@ -138,18 +138,18 @@
 </div>
 
 <!-- ======================= THE GAME ======================= -->
-<div id="play">
+<main id="play" aria-label="The map">
   <div class="neb"></div>
   <div class="tint" id="tint"></div>
   <canvas id="sky" aria-label="The Astris map. Drag to pan, scroll to zoom, click a star to travel to it."></canvas>
   <div class="gbar">
-    <a class="logo" data-go="main-page" aria-label="Astris, back to the main page">Astr<span class="i">&#305;<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M30 0 Q33 27 60 30 Q33 33 30 60 Q27 33 0 30 Q27 27 30 0 Z" fill="url(#lgn)"/></svg></span>s</a>
+    <a class="logo" href="/" data-go="main-page" aria-label="Astris, back to the main page">Astr<span class="i">&#305;<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M30 0 Q33 27 60 30 Q33 33 30 60 Q27 33 0 30 Q27 27 30 0 Z" fill="url(#lgn)"/></svg></span>s</a>
     <div class="gsearch"><input id="gq" type="text" placeholder="Search Wikipedia" aria-label="Search Wikipedia" autocomplete="off" spellcheck="false"><ul class="gsugg" id="gsugg" role="listbox"></ul></div>
     <div class="modes" id="modes" role="group" aria-label="Mode">
       <button type="button" data-mode="explore" aria-pressed="true">Explore</button><button type="button" data-mode="race" aria-pressed="false">Race</button>
       <button type="button" data-mode="connect" aria-pressed="false">Connect two</button><button type="button" data-mode="daily" aria-pressed="false">Daily</button><button type="button" data-mode="drift" aria-pressed="false">Drift</button>
     </div>
-    <div class="right"><button class="gbtn" type="button" id="skyBtn" aria-controls="atlas">My sky</button><button class="gbtn" type="button" id="surprise">Random article</button><button class="gbtn icon" type="button" id="snd" aria-pressed="false" aria-label="Sound" title="Sound is off">&#9834;</button><button class="gbtn icon" type="button" id="tourbtn" aria-label="How to play" title="How to play">?</button><a class="lk" data-go="main-page">Main page</a></div>
+    <div class="right"><button class="gbtn" type="button" id="skyBtn" aria-controls="atlas">My sky</button><button class="gbtn" type="button" id="surprise">Random article</button><button class="gbtn icon" type="button" id="snd" aria-pressed="false" aria-label="Sound" title="Sound is off">&#9834;</button><button class="gbtn icon" type="button" id="tourbtn" aria-label="How to play" title="How to play">?</button><a class="lk" href="/" data-go="main-page">Main page</a></div>
   </div>
   <div class="gzoom card" role="group" aria-label="Zoom"><button type="button" id="zin" aria-label="Zoom in">+</button><button type="button" id="zout" aria-label="Zoom out">−</button><button type="button" id="zfit" aria-label="Centre the current article">◎</button></div>
   <div id="hud" class="card" role="status"></div>
@@ -160,6 +160,6 @@
   <div id="toast" class="card" role="status"></div>
   <section id="outage" class="outage" role="alert" hidden></section>
   <div class="gfoot"><span>Click a star to travel · drag to pan · scroll to zoom · <span class="mono">/</span> to search · <span class="mono">N</span> for a new chain · arrow keys and <span class="mono">Enter</span> to travel</span><span class="mono" id="gstat"></span></div>
-</div>
+</main>
   </body>
 </html>

@@ -119,3 +119,19 @@ test('the stats page starts empty and lists a finished run', async ({ page }) =>
   await page.locator('#statsReset').click();
   await expect(page.locator('#statsBody')).toContainText('No runs yet');
 });
+
+test('accessibility basics: one h1, a main landmark on the map, and a keyboard way back to the main page', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('h1:visible')).toHaveCount(1);
+  await expect(page.locator('footer.vfoot div a').first()).toHaveCSS('text-decoration-line', 'underline');
+  await page.goto('/play');
+  await expect(page.locator('main#play')).toHaveCount(1);
+  await expect(page.locator('#play a.logo')).toHaveAttribute('href', '/');
+  await expect(page.locator('#play a.lk[data-go="main-page"]')).toHaveAttribute('href', '/');
+});
+
+test('the main page paints its page colour under the wash', async ({ page }) => {
+  await page.goto('/');
+  const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(bg).not.toBe('rgba(0, 0, 0, 0)');
+});
