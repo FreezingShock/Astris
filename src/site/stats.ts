@@ -56,7 +56,7 @@ export function statsHtml(stats: Stats, today: number = dayOf()): string {
     "</ul></div></div></div><div><div class='box b'><h2>How scoring works</h2><div class='in'><ul>" +
     '<li>Up to 600 for steps: full marks at par, less for each click over, and 100 extra for each click under.</li>' +
     '<li>Up to 300 for speed, against 30 seconds a step of par plus 30.</li>' +
-    '<li>Each hint costs 100.</li>' +
+    '<li>Each Reveal costs 100.</li>' +
     '<li>Three stars: par or better with no hints. Two: one over par and at most one hint. Otherwise one.</li>' +
     "</ul></div></div></div></div><div class='box c recent'><h2>Recent runs</h2><div class='in'><div class='scroll'><table><thead><tr><th>Day</th><th>Race</th><th>Stars</th><th>Points</th><th>Result</th></tr></thead><tbody>" +
     stats.recent.map(runRow).join('') +

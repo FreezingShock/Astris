@@ -1,5 +1,5 @@
 import type { ArticleSummary, Constellation, DataProvider, Suggestion } from '../types';
-import { clock, esc } from '../lib';
+import { esc } from '../lib';
 import { replay, subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
 import { Atlas, Collection } from '../sky';
@@ -10,7 +10,9 @@ import { recordRun } from './stats';
 import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
 import { UNREACHABLE_NOTE, failureOf } from './failure';
 import { legendHtml, panelHtml, suggestNext } from './panel';
-import { PICKING_HTML, beginRace, hudHtml, solvePar, randomPair, stepRace, type Pair, type Race } from './race';
+import { graphOf, route } from './graph';
+import { NO_RULES, REVEAL_BUDGET, loadRules, refusal, revealText, saveRules, type Rules } from './rules';
+import { PAR_BEAM, PAR_DEPTH, PICKING_HTML, beginRace, clockText, expire, hudHtml, solvePar, randomPair, stepRace, type Pair, type Race } from './race';
 
 export type Mode = 'explore' | 'race' | 'daily' | 'connect' | 'drift';
 
@@ -87,7 +89,11 @@ export class Play {
           stats.stars + ' stars · ' + stats.memories + (stats.memories === 1 ? ' memory' : ' memories') + ' · ' + this.discovery.label + ' · ' + this.copy.status;
         if (this.race && !this.race.done) {
           const t = document.getElementById('rt');
-          if (t) t.textContent = clock(now - this.race.t0);
+          if (t) t.textContent = clockText(this.race, now);
+          if (expire(this.race, now)) {
+            this.engine.markerTitle = null;
+            this.hud();
+          }
         }
       },
     });
@@ -147,6 +153,12 @@ export class Play {
     const cur = this.engine.current;
     if (!cur) return this.open(title, false);
     if (title === cur.title) return;
+    const race = this.race;
+    if (race && !race.done) {
+      const subject = cur.nodes.find((n) => n.title === title)?.subject;
+      const why = refusal(race.rules, title, race.target, subject, race.seen, race.revisits);
+      if (why) return this.toast(why);
+    }
     const data = await this.load(title);
     if (!data) return;
     this.collect(data);
@@ -170,7 +182,7 @@ export class Play {
   }
 
   /** Start a race between two articles. Par is searched for in the background unless it is already known. */
-  async startRace(start: string, target: string, knownPar?: number, day?: number, hard = false): Promise<void> {
+  async startRace(start: string, target: string, knownPar?: number, day?: number, hard = false, rules: Rules = day === undefined ? loadRules() : NO_RULES): Promise<void> {
     const seq = ++this.raceSeq;
     this.picking = false;
     this.setMode(day === undefined ? 'race' : 'daily');
@@ -181,7 +193,7 @@ export class Play {
       return;
     }
     // The provider follows redirects, so race on the titles it actually uses.
-    const race = beginRace(data.center.title, target, knownPar ?? null, performance.now(), day, hard);
+    const race = beginRace(data.center.title, target, knownPar ?? null, performance.now(), day, hard, rules);
     this.race = race;
     this.engine.markerTitle = target;
     this.reset(data);
@@ -267,6 +279,32 @@ export class Play {
     }
   }
 
+  /** Turn a rule on or off. The same race starts over so the new rule applies from the first click. */
+  private async toggleRule(rule: keyof Rules): Promise<void> {
+    const race = this.race;
+    if (!race || race.day !== undefined) return;
+    const rules = { ...race.rules, [rule]: !race.rules[rule] };
+    saveRules(rules);
+    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, undefined, false, rules);
+  }
+
+  /** Reveal: spend one use to learn how far the target is from here and the first step to take. */
+  private async reveal(): Promise<void> {
+    const race = this.race;
+    const cur = this.engine.current;
+    if (!race || race.done || !cur || !race.reveals) return;
+    race.note = 'Looking for a route…';
+    this.hud();
+    const chain = await route(graphOf(this.provider), cur.title, race.target, { maxDepth: PAR_DEPTH, budget: REVEAL_BUDGET, beam: PAR_BEAM });
+    if (this.race !== race || race.done || this.engine.current !== cur) return;
+    if (chain) {
+      race.reveals--;
+      race.revealed++;
+    }
+    race.note = revealText(chain);
+    this.hud();
+  }
+
   /** Copy the finished daily's result grid, which names neither article, to the clipboard. */
   async shareDaily(): Promise<void> {
     const race = this.race;
@@ -283,7 +321,7 @@ export class Play {
   async retryRace(): Promise<void> {
     const race = this.race;
     if (!race) return this.newRace();
-    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, race.day, race.hard);
+    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, race.day, race.hard, race.rules);
   }
 
   /** Drift: the map travels to a neighbouring article every few seconds until the reader acts. */
@@ -417,7 +455,7 @@ export class Play {
         clicks: race.clicks,
         par: race.par,
         time: race.time,
-        hints: race.hints,
+        hints: race.revealed,
       });
       this.prepare();
     }
@@ -598,6 +636,8 @@ export class Play {
     });
     $('hud').addEventListener('click', (e) => {
       const id = (e.target as HTMLElement).id;
+      const rule = (e.target as HTMLElement).closest<HTMLElement>('[data-rule]')?.dataset.rule;
+      if (rule === 'places' || rule === 'backtracks' || rule === 'blitz') return void this.toggleRule(rule);
       const hop = (e.target as HTMLElement).closest<HTMLElement>('[data-t]')?.dataset.t;
       if (hop) {
         this.connect.halt();
@@ -606,6 +646,7 @@ export class Play {
       else if (id === 'cstop') this.connect.halt();
       else if (id === 'cnew') this.connect.start();
       else if (id === 'csurprise') void this.surprisePair();
+      else if (id === 'reveal') void this.reveal();
       else if (id === 'again') void this.newRace();
       else if (id === 'retry') void this.retryRace();
       else if (id === 'dtoggle') void this.startDaily(!this.race?.hard);

@@ -5,6 +5,7 @@ import { starsText } from './score';
 import type { Recorded } from './stats';
 import { solve, type LinkSource, type Solution } from '../data';
 import { graphOf, route } from './graph';
+import { BACKTRACKS, NO_RULES, REVEALS, ruleLabel, secondsLeft, type Rules } from './rules';
 
 /** The furthest a par search looks before giving up. */
 export const PAR_DEPTH = 4;
@@ -33,12 +34,22 @@ export interface Race {
   t0: number;
   time: number;
   done: boolean;
-  /** Hints the reader has used. Whatever gives a hint raises this; each one costs points. */
-  hints: number;
   /** The score and personal bests of the finished run. */
   result?: Recorded;
   /** One line about the target article, once it has been fetched. */
   hint?: string;
+  rules: Rules;
+  /** Articles visited so far, the start included. */
+  seen: Set<string>;
+  /** Clicks on an article already visited. */
+  revisits: number;
+  /** Reveals left, and how many were used. */
+  reveals: number;
+  revealed: number;
+  /** A line from the last Reveal, cleared by the next click. */
+  note?: string;
+  /** True when a Blitz clock ran out before the target was reached. */
+  lost: boolean;
   /** Set when this is the daily race: the day it belongs to. */
   day?: number;
   /** The reader's best finish for that day, once they have one. */
@@ -51,8 +62,22 @@ export interface Race {
 }
 
 /** A fresh race, with the clock started. */
-export function beginRace(start: string, target: string, par: number | null, now: number, day?: number, hard = false): Race {
-  const race: Race = { start, target, clicks: 0, par, hints: 0, t0: now, time: 0, done: false };
+export function beginRace(start: string, target: string, par: number | null, now: number, day?: number, hard = false, rules: Rules = NO_RULES): Race {
+  const race: Race = {
+    start,
+    target,
+    clicks: 0,
+    par,
+    t0: now,
+    time: 0,
+    done: false,
+    rules: { ...rules },
+    seen: new Set([start]),
+    revisits: 0,
+    reveals: REVEALS,
+    revealed: 0,
+    lost: false,
+  };
   if (day !== undefined) race.day = day;
   if (hard) race.hard = true;
   return race;
@@ -62,6 +87,9 @@ export function beginRace(start: string, target: string, par: number | null, now
 export function stepRace(race: Race, title: string, now: number): boolean {
   if (race.done) return false;
   race.clicks++;
+  delete race.note;
+  if (race.seen.has(title)) race.revisits++;
+  else race.seen.add(title);
   if (title !== race.target) return false;
   race.done = true;
   race.time = now - race.t0;
@@ -192,6 +220,32 @@ export async function randomPair(provider: DataProvider, rand: () => number = Ma
   throw new Error('No race could be picked.');
 }
 
+/** End a Blitz race whose clock has run out. Returns true when it just ended. */
+export function expire(race: Race, now: number): boolean {
+  const left = secondsLeft(race.rules, now - race.t0);
+  if (race.done || left === null || left > 0) return false;
+  race.done = true;
+  race.lost = true;
+  race.time = now - race.t0;
+  return true;
+}
+
+/** The clock text: time left in Blitz, time spent otherwise. */
+export function clockText(race: Race, now: number): string {
+  const left = secondsLeft(race.rules, now - race.t0);
+  return left === null ? clock(now - race.t0) : clock(left * 1000);
+}
+
+/** The rule buttons and the Reveal button under a running race. */
+function toolsHtml(race: Race): string {
+  const chip = (rule: keyof Rules, text: string): string =>
+    "<button class='chip' type='button' data-rule='" + rule + "' aria-pressed='" + race.rules[rule] + "'>" + text + '</button>';
+  const rules = (['places', 'backtracks', 'blitz'] as const).map((r) => chip(r, ruleLabel(r))).join('');
+  const left = race.rules.backtracks ? "<span id='rb'>" + Math.max(0, BACKTRACKS - race.revisits) + ' backtracks left</span>' : '';
+  const reveal = "<button class='chip' type='button' id='reveal'" + (race.reveals ? '' : ' disabled') + '>Reveal · ' + race.reveals + ' left</button>';
+  return "<div class='rules'>" + rules + reveal + left + '</div>';
+}
+
 /** How a finished race compares with par, in words. Empty while par is unknown. */
 export function verdict(clicks: number, par: number | null): string {
   if (par === null || par < 0) return '';
@@ -246,23 +300,28 @@ export function hudHtml(race: Race): string {
       esc(race.target) +
       '</em></div>' +
       (race.hint && !race.hard ? "<div class='hint'>" + esc(race.hint) + '</div>' : '') +
+      (race.note ? "<div class='hint note'>" + esc(race.note) + '</div>' : '') +
       "<div class='stats'><span id='rc'>" +
       race.clicks +
-      " clicks</span><span id='rt'>00:00</span><span id='rp'>" +
+      " clicks</span><span id='rt'>" +
+      clockText(race, race.t0 + race.time) +
+      "</span><span id='rp'>" +
       parText(race) +
       '</span>' +
       (daily ? button('retry', 'Restart') + button('dtoggle', race.hard ? 'Normal version' : 'Hard version') : button('again', 'New race')) +
       button('quit', 'Quit') +
-      '</div>'
+      '</div>' +
+      (daily ? '' : toolsHtml(race))
     );
   const best = race.best ? '<span>your best today ' + race.best.clicks + (race.best.clicks === 1 ? ' click' : ' clicks') + ' in ' + clock(race.best.time) + '</span>' : '';
   return (
     day +
-    "<div class='line'>Arrived at <em>" +
+    (race.lost ? "<div class='line'>Time's up before <em>" : "<div class='line'>Arrived at <em>") +
     esc(race.target) +
     '</em></div>' +
     (verdict(race.clicks, race.par) ? "<div class='line'>" + esc(verdict(race.clicks, race.par)) + '</div>' : '') +
     scoreHtml(race) +
+    (!race.lost && verdict(race.clicks, race.par) ? "<div class='line'>" + esc(verdict(race.clicks, race.par)) + '</div>' : '') +
     (race.route && race.route.length > 1
       ? "<div class='hint'>" + (race.parExact === false ? 'Shortest route found: ' : 'Shortest route: ') + race.route.map(esc).join(' → ') + '</div>'
       : '') +

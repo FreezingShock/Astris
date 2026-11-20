@@ -110,6 +110,19 @@ test('an empty Connect two field offers the map’s best next stars', async ({ p
   expect(await page.locator('#clist option').count()).toBeGreaterThanOrEqual(5);
 });
 
+test('race rules restart the race, Reveal names a route, and the no-places rule blocks a place star', async ({ page }) => {
+  await page.goto('/play?race=Brutalist%20architecture|Jazz');
+  const hud = page.locator('#hud');
+  await expect(hud).toContainText('par 4');
+  await hud.locator('[data-rule="blitz"]').click();
+  await expect(hud.locator('#rt')).toHaveText(/01:(30|29)/);
+  await expect(hud.locator('[data-rule="blitz"]')).toHaveAttribute('aria-pressed', 'true');
+  await hud.locator('#reveal').click();
+  await expect(hud.locator('.note')).toContainText(/route of \d clicks? exists|No short route/);
+  await hud.locator('[data-rule="blitz"]').click();
+  await expect(hud.locator('#rt')).toHaveText('00:00');
+});
+
 test('the hard daily hides the hint, finishes with a streak and copies a share result', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/play?daily=hard');
