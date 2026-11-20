@@ -81,3 +81,13 @@ test('a shared article link opens that article', async ({ page }) => {
   await page.goto('/play?a=Jazz');
   await expect(page.locator('#panel h1')).toHaveText('Jazz');
 });
+
+test('Connect two is live on the main page and opens in the map', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#vside')).not.toContainText('Connect two (planned)');
+  await page.locator('.vmain a[data-connect]').click();
+  await expect(page).toHaveURL(/\/play/);
+  await expect(page.locator('#modes [data-mode="connect"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.goto('/play?connect=1');
+  await expect(page.locator('#modes [data-mode="connect"]')).toHaveAttribute('aria-pressed', 'true');
+});
