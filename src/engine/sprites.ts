@@ -1,5 +1,6 @@
 import type { SubjectId } from '../types';
 import { subjectRgb, token } from '../styles';
+import { CONFIG } from './config';
 
 /** Pre-rendered light: glow sprites drawn with additive blending. Colour is the subject. */
 export interface Sprites {
@@ -57,8 +58,11 @@ function starSprite(rgb: string): HTMLCanvasElement {
   return c;
 }
 
-function dustSprite(): HTMLCanvasElement {
-  const [c, x] = canvas(512);
+/** Drawn at the screen's own pixel size and brightness, so each frame copies it without scaling or fading. */
+function dustSprite(ratio: number): HTMLCanvasElement {
+  const [c, x] = canvas(Math.round(CONFIG.dustTile * ratio));
+  x.scale(ratio, ratio);
+  x.globalAlpha = CONFIG.dustAlpha;
   const tintA = token('--dust-a-rgb');
   const tintB = token('--dust-b-rgb');
   let s = 7;
@@ -76,6 +80,11 @@ function dustSprite(): HTMLCanvasElement {
     x.fill();
   }
   return c;
+}
+
+/** The screen's pixel ratio, capped so that a very dense screen does not cost more than it shows. */
+export function pixelRatio(): number {
+  return Math.min(CONFIG.maxPixelRatio, window.devicePixelRatio || 1);
 }
 
 let shared: Sprites | null = null;
@@ -99,7 +108,7 @@ export function sprites(): Sprites {
       return c;
     },
     white: glowSprite(token('--white-rgb'), 1),
-    dust: dustSprite(),
+    dust: dustSprite(pixelRatio()),
   };
   return shared;
 }
