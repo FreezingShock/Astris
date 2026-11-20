@@ -3,10 +3,12 @@ import { expect, test } from '@playwright/test';
 test('main page', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
+  // Today's race follows the date, so hold the clock on a day whose pair is known.
+  await page.clock.setFixedTime(new Date('2026-11-20T12:00:00Z'));
   await page.goto('/');
   await expect(page.locator('#page-main-page')).toBeVisible();
   await expect(page.locator('.welcome .big')).toContainText('Welcome to Astris');
-  await expect(page.locator('#parText')).toHaveText('Par for this pair is 4 clicks.');
+  await expect(page.locator('#parText')).toHaveText('Par for this pair is 3 clicks.');
   await expect(page.locator('#topicKey .dot')).toHaveCount(12);
   expect(errors).toEqual([]);
 });
