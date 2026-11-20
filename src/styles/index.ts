@@ -67,11 +67,6 @@ export function subjectKeyHtml(): string {
   }).join(' &nbsp; ');
 }
 
-/** One dot per subject, shown on the design system page. */
-export function subjectDotsHtml(): string {
-  return SUBJECTS.map((c) => "<span class='dot' title='" + esc(c) + "' style='--c:rgb(" + subjectRgb(c) + ")'></span>").join('');
-}
-
 /** True when the reader asked the system for reduced motion. */
 export function prefersReducedMotion(): boolean {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;

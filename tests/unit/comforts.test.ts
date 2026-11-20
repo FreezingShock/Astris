@@ -363,7 +363,7 @@ describe('share links', () => {
       off.now.state = null;
       off.share.sync();
       expect(off.replaced).toEqual([]);
-      const site = setup('/design-system', '', true);
+      const site = setup('/', '', true);
       site.share.sync();
       expect(site.replaced).toEqual([]);
     });

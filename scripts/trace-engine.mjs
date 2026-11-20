@@ -41,8 +41,8 @@ const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PAT
 try {
   const context = await browser.newContext({ viewport: { width: opt.width, height: opt.height }, deviceScaleFactor: opt.dpr });
   const page = await context.newPage();
-  // any page that loads the design tokens will do; this one has no map of its own running
-  await page.goto(url + '/design-system');
+  // any page that loads the design tokens will do; the main page's small map is the only one running
+  await page.goto(url + '/');
   await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--night').trim() !== '');
   if (opt.cpu > 1) {
     const cdp = await context.newCDPSession(page);

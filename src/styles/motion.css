@@ -41,7 +41,7 @@
   animation: m-drop var(--dur-slow) var(--ease-out) both;
 }
 
-/* switching between the main page, the design system and the map */
+/* switching between the main page and the map */
 #page-main-page.on {
   animation: m-fade var(--dur-slow) var(--ease-out) both;
 }

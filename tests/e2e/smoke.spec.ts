@@ -13,13 +13,6 @@ test('main page', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('design system page', async ({ page }) => {
-  await page.goto('/design-system');
-  await expect(page.locator('#page-design-system h1')).toHaveText('Astris design system');
-  await expect(page.locator('#tab-design-system')).toHaveAttribute('aria-current', 'page');
-  await expect(page.locator('#page-main-page')).toBeHidden();
-});
-
 test('the map grows a constellation and travels', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -44,7 +37,7 @@ test('a race link starts a race', async ({ page }) => {
 });
 
 test('the footer credits Wikipedia and names the licence', async ({ page }) => {
-  for (const path of ['/', '/design-system']) {
+  for (const path of ['/']) {
     await page.goto(path);
     const foot = page.locator('.vfoot');
     await expect(foot).toContainText('built on Wikipedia');
@@ -56,22 +49,18 @@ test('the footer credits Wikipedia and names the licence', async ({ page }) => {
 test('site links are real links and travel without a reload', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.vlinks a').first()).toHaveAttribute('href', '/play');
-  await page.locator('.vlinks a', { hasText: 'Design system' }).click();
-  await expect(page).toHaveURL(/\/design-system$/);
-  await expect(page.locator('#page-design-system')).toBeVisible();
+  await page.locator('.vlinks a', { hasText: 'Play' }).click();
+  await expect(page).toHaveURL(/\/play/);
+  await expect(page.locator('#sky')).toBeVisible();
   await page.goBack();
   await expect(page.locator('#page-main-page')).toBeVisible();
 });
 
 test('phone layout: the menu folds away and nothing overflows', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const path of ['/', '/design-system']) {
-    await page.goto(path);
-    await expect(page.locator('#vside')).toBeHidden();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
-    const dots = await page.locator('.spacecard').evaluate((el) => el.scrollWidth - el.clientWidth);
-    expect(dots).toBeLessThanOrEqual(0);
-  }
+  await page.goto('/');
+  await expect(page.locator('#vside')).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
   await page.locator('#menuBtn').click();
   await expect(page.locator('#vside')).toBeVisible();
   await expect(page.locator('#menuBtn')).toHaveAttribute('aria-expanded', 'true');

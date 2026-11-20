@@ -5,7 +5,7 @@ import { articleOf, dispatchPlayLink, onPlayLink, playUrl, racePairOf, routeOf }
 describe('router', () => {
   it('maps paths to routes', () => {
     expect(routeOf({ pathname: '/', hash: '' })).toBe('main-page');
-    expect(routeOf({ pathname: '/design-system', hash: '' })).toBe('design-system');
+    expect(routeOf({ pathname: '/design-system', hash: '' })).toBe('main-page');
     expect(routeOf({ pathname: '/play/', hash: '' })).toBe('play');
     expect(routeOf({ pathname: '/nowhere', hash: '' })).toBe('main-page');
   });
