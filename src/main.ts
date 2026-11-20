@@ -20,7 +20,17 @@ import type { DataProvider } from './types';
  * which is what the Playwright smoke tests do so that they never depend on the network.
  */
 const live = import.meta.env.VITE_DATA === 'sample' ? null : new WikipediaProvider();
-const provider: DataProvider = live ?? new SampleProvider();
+const sample = new SampleProvider();
+// A sample build with ?latency=800 waits that many milliseconds before each constellation, to try the map on a slow network.
+const wait = Number(new URLSearchParams(location.search).get('latency')) || 0;
+const slow: DataProvider = {
+  suggest: (q) => sample.suggest(q),
+  constellation: (t) => (wait ? new Promise((r) => setTimeout(r, wait)).then(() => sample.constellation(t)) : sample.constellation(t)),
+  summary: (t) => sample.summary(t),
+  random: () => sample.random(),
+  neighbours: (t) => sample.neighbours(t),
+};
+const provider: DataProvider = live ?? slow;
 const copy: SourceCopy = live
   ? {
       status: 'live from Wikipedia',

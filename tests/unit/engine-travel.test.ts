@@ -254,3 +254,61 @@ describe('reduced motion', () => {
     expect(engine.running).toBe(true);
   });
 });
+
+describe('travelling before the data arrives', () => {
+  it('moves the camera at once, keeps the old map, and blooms the stars in when they arrive', async () => {
+    const { dom, engine } = await setup();
+    const from = engine.current!;
+    const { star, data } = await reachable(from, (r) => r <= 2);
+    const events: string[] = [];
+    expect(engine.begin(star.title)).toBe(true);
+    // nothing has loaded, yet the star is the centre and the next frame already moves the view
+    expect(engine.current!.title).toBe(star.title);
+    expect(engine.loading).toBe(star.title);
+    expect(engine.current!.nodes).toHaveLength(0);
+    const x0 = engine.current!.cx;
+    dom.step(16);
+    dom.run(200);
+    expect(Math.abs(engine.current!.cx - x0)).toBeGreaterThan(0.5);
+    expect(from.nodes.every((n) => n.a === 1)).toBe(true);
+    events.push('moving');
+    engine.travel(data);
+    expect(engine.loading).toBeNull();
+    expect(engine.current!.title).toBe(star.title);
+    expect(engine.current!.nodes.length).toBeGreaterThan(0);
+    dom.run(SETTLE_MS);
+    expect(engine.current!.nodes.every((n) => n.a === 1 || n.dup)).toBe(true);
+    expect(engine.trail.filter((t) => t === star.title)).toHaveLength(1);
+    expect(events).toEqual(['moving']);
+  });
+
+  it('undoes a travel whose data never comes', async () => {
+    const { dom, engine } = await setup();
+    const from = engine.current!;
+    const { star } = await reachable(from, () => true);
+    const trail = [...engine.trail];
+    engine.begin(star.title);
+    engine.abort('Something else');
+    expect(engine.loading).toBe(star.title);
+    engine.abort(star.title);
+    dom.run(SETTLE_MS);
+    expect(engine.current).toBe(from);
+    expect(engine.trail).toEqual(trail);
+    expect(engine.memories).toEqual([]);
+    expect(engine.visited.has(from.title)).toBe(false);
+  });
+
+  it('lets a second click replace one still loading, and a visited centre open without data', async () => {
+    const { dom, engine, go } = await setup();
+    const a = engine.current!;
+    await go('Jazz');
+    dom.run(SETTLE_MS);
+    const jazz = engine.current!;
+    const { star } = await reachable(jazz, () => true);
+    engine.begin(star.title);
+    expect(engine.revisit('Architecture')).toBe(true);
+    expect(engine.loading).toBeNull();
+    expect(engine.current).toBe(a);
+    expect(engine.memories).toEqual([jazz]);
+  });
+});
