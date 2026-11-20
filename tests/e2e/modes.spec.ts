@@ -28,3 +28,26 @@ test('a race can be finished, run again and replaced with a new one', async ({ p
   await expect(page.locator('#modes [data-mode="explore"]')).toHaveAttribute('aria-pressed', 'true');
   expect(errors).toEqual([]);
 });
+
+test('the daily race starts from its tab, finishes and remembers the best result', async ({ page }) => {
+  await page.goto('/play');
+  await page.locator('#modes [data-mode="daily"]').click();
+  const hud = page.locator('#hud');
+  await expect(hud).toContainText('Daily constellation');
+  await expect(page.locator('#modes [data-mode="daily"]')).toHaveAttribute('aria-pressed', 'true');
+  const target = (await hud.locator('.line em').textContent()) ?? '';
+  expect(target.length).toBeGreaterThan(0);
+  await expect(page.locator('#panel h1')).not.toHaveText('Architecture');
+
+  await page.locator('#gq').fill(target);
+  await expect(page.locator('#gsugg li').first()).toContainText(target);
+  await page.keyboard.press('Enter');
+  await expect(hud).toContainText('Arrived at ' + target);
+  await expect(hud).toContainText('your best today 1 click');
+
+  await hud.locator('#retry').click();
+  await expect(hud.locator('#rc')).toHaveText('0 clicks');
+  await expect(hud).toContainText('Daily constellation');
+  await hud.locator('#quit').click();
+  await expect(hud).toBeHidden();
+});

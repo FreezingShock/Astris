@@ -1,5 +1,6 @@
 import type { DataProvider } from '../types';
 import { clock, esc } from '../lib';
+import { dayLabel, type DailyResult } from './daily';
 import { graphOf, route } from './graph';
 
 /** The furthest a par search looks before giving up. */
@@ -25,11 +26,17 @@ export interface Race {
   t0: number;
   time: number;
   done: boolean;
+  /** Set when this is the daily race: the day it belongs to. */
+  day?: number;
+  /** The reader's best finish for that day, once they have one. */
+  best?: DailyResult;
 }
 
 /** A fresh race, with the clock started. */
-export function beginRace(start: string, target: string, par: number | null, now: number): Race {
-  return { start, target, clicks: 0, par, t0: now, time: 0, done: false };
+export function beginRace(start: string, target: string, par: number | null, now: number, day?: number): Race {
+  const race: Race = { start, target, clicks: 0, par, t0: now, time: 0, done: false };
+  if (day !== undefined) race.day = day;
+  return race;
 }
 
 /** Count one click. Returns true when that click reached the target and finished the race. */
@@ -115,26 +122,45 @@ function parText(race: Race): string {
 /** The status card while a random pair is being picked. */
 export const PICKING_HTML = "<div class='line'>Picking two articles…</div>";
 
+const button = (id: string, text: string): string => "<button class='lk' type='button' id='" + id + "'>" + text + '</button>';
+
 /** The status card at the top of the map while a race runs. */
 export function hudHtml(race: Race): string {
-  return race.done
-    ? "<div class='line'>Arrived at <em>" +
-        esc(race.target) +
-        "</em></div><div class='stats'><span>" +
-        race.clicks +
-        (race.clicks === 1 ? ' click' : ' clicks') +
-        '</span><span>' +
-        clock(race.time) +
-        '</span><span>' +
-        parText(race) +
-        "</span><button class='lk' type='button' id='retry'>Same race</button><button class='lk' type='button' id='again'>New race</button><button class='lk' type='button' id='quit'>Keep exploring</button></div>"
-    : "<div class='line'>" +
-        esc(race.start) +
-        ' → <em>' +
-        esc(race.target) +
-        "</em></div><div class='stats'><span id='rc'>" +
-        race.clicks +
-        " clicks</span><span id='rt'>00:00</span><span id='rp'>" +
-        parText(race) +
-        "</span><button class='lk' type='button' id='again'>New race</button><button class='lk' type='button' id='quit'>Quit</button></div>";
+  const daily = race.day !== undefined;
+  const day = race.day === undefined ? '' : "<div class='day'>Daily constellation · " + esc(dayLabel(race.day)) + '</div>';
+  if (!race.done)
+    return (
+      day +
+      "<div class='line'>" +
+      esc(race.start) +
+      ' → <em>' +
+      esc(race.target) +
+      "</em></div><div class='stats'><span id='rc'>" +
+      race.clicks +
+      " clicks</span><span id='rt'>00:00</span><span id='rp'>" +
+      parText(race) +
+      '</span>' +
+      (daily ? button('retry', 'Restart') : button('again', 'New race')) +
+      button('quit', 'Quit') +
+      '</div>'
+    );
+  const best = race.best ? '<span>your best today ' + race.best.clicks + (race.best.clicks === 1 ? ' click' : ' clicks') + ' in ' + clock(race.best.time) + '</span>' : '';
+  return (
+    day +
+    "<div class='line'>Arrived at <em>" +
+    esc(race.target) +
+    "</em></div><div class='stats'><span>" +
+    race.clicks +
+    (race.clicks === 1 ? ' click' : ' clicks') +
+    '</span><span>' +
+    clock(race.time) +
+    '</span><span>' +
+    parText(race) +
+    '</span>' +
+    best +
+    button('retry', 'Same race') +
+    button('again', daily ? 'Random race' : 'New race') +
+    button('quit', 'Keep exploring') +
+    '</div>'
+  );
 }
