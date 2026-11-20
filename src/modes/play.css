@@ -441,6 +441,33 @@
   color: var(--neb-rose);
   font-weight: 600;
 }
+#hud .streak {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  flex-basis: 100%;
+}
+#hud .cal {
+  display: grid;
+  grid-template-columns: repeat(14, 8px);
+  gap: 3px;
+}
+#hud .cal i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--muted);
+  opacity: 0.25;
+}
+#hud .cal i.on {
+  background: var(--neb-rose);
+  opacity: 1;
+}
+#hud .cal i.today {
+  outline: 1px solid var(--neb-rose);
+  outline-offset: 1px;
+}
 #hud.win {
   box-shadow:
     0 0 0 1px var(--neb-rose),

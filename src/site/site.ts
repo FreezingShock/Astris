@@ -73,7 +73,7 @@ export class Site {
     const pair = racePairOf(location.search);
     const article = articleOf(location.search);
     const query = new URLSearchParams(location.search);
-    if (query.has('daily')) void this.play.startDaily();
+    if (query.has('daily')) void this.play.startDaily(query.get('daily') === 'hard');
     else if (query.has('connect')) void this.play.startConnect();
     else if (pair) void this.play.startRace(pair.start, pair.target);
     else if (article) void this.play.open(article);
