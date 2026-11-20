@@ -2,6 +2,7 @@ import type { ArticleSummary, Constellation, DataProvider, Suggestion } from '..
 import { clock, esc } from '../lib';
 import { replay, subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
+import { Atlas, Collection } from '../sky';
 import { Discovery, Share, Tip, firstLine, initKeyboard } from '../comforts';
 import { Connect, connectHtml, type ConnectState } from './connect';
 import { dailyPair, dayOf, recent, saveDaily, shareText, streak } from './daily';
@@ -9,7 +10,7 @@ import { recordRun } from './stats';
 import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
 import { UNREACHABLE_NOTE, failureOf } from './failure';
 import { legendHtml, panelHtml, suggestNext } from './panel';
-import { PICKING_HTML, beginRace, hudHtml, par, randomPair, stepRace, type Pair, type Race } from './race';
+import { PICKING_HTML, beginRace, hudHtml, solvePar, randomPair, stepRace, type Pair, type Race } from './race';
 
 export type Mode = 'explore' | 'race' | 'daily' | 'connect' | 'drift';
 
@@ -46,6 +47,8 @@ export class Play {
   private ahead: Promise<Pair> | null = null;
   private readonly connect: Connect;
   private readonly discovery = new Discovery();
+  private readonly collection = new Collection();
+  private atlas: Atlas | null = null;
   private readonly tip: Tip;
   private readonly share: Share;
   private seq = 0;
@@ -128,6 +131,7 @@ export class Play {
 
   /** The map route closed. */
   leave(): void {
+    this.atlas?.close(false);
     this.engine.disable();
   }
 
@@ -145,7 +149,7 @@ export class Play {
     if (title === cur.title) return;
     const data = await this.load(title);
     if (!data) return;
-    this.discovery.note(data);
+    this.collect(data);
     this.engine.travel(data);
   }
 
@@ -194,10 +198,13 @@ export class Play {
       },
       () => undefined,
     );
-    if (knownPar !== undefined) return;
-    const found = await par(this.provider, race.start, target);
+    const found = await solvePar(this.provider, race.start, target);
     if (this.race !== race) return;
-    race.par = found;
+    if (found.par >= 0 || knownPar === undefined) {
+      race.par = found.par;
+      race.parExact = found.exact;
+    }
+    if (found.route) race.route = found.route;
     this.hud();
   }
 
@@ -349,8 +356,19 @@ export class Play {
     }
   }
 
-  private reset(data: Constellation): void {
+  /** Count the constellation as discovered and add its centre to the sky map. */
+  private collect(data: Constellation): void {
     this.discovery.note(data);
+    const r = this.collection.visit(data.center.title, data.center.subject);
+    const said: string[] = [];
+    if (r.lit) said.push('New region lit: ' + r.lit);
+    for (const a of r.unlocked) said.push('Achievement: ' + a.name);
+    if (said.length) this.toast(said.join(' · '));
+    this.atlas?.refresh();
+  }
+
+  private reset(data: Constellation): void {
+    this.collect(data);
     this.engine.reset(data);
   }
 
@@ -535,7 +553,7 @@ export class Play {
       const hit = li ? this.found[Number(li.dataset.i)] : undefined;
       if (hit) this.choose(hit.title);
     });
-    initKeyboard(gq, this.isOpen, { map: engine, go: (title) => void this.navigate(title) });
+    initKeyboard(gq, () => this.isOpen() && !this.atlas?.isOpen, { map: engine, go: (title) => void this.navigate(title) });
 
     document.addEventListener('keydown', (e) => {
       const t = e.target;
@@ -545,6 +563,9 @@ export class Play {
         void this.newChain();
       }
     });
+    const atlas = new Atlas({ collection: this.collection, open: (title) => void this.open(title) });
+    this.atlas = atlas;
+    $('skyBtn').addEventListener('click', () => (atlas.isOpen ? atlas.close() : atlas.open()));
     $('surprise').addEventListener('click', () => void this.surprise());
     $('zin').addEventListener('click', () => engine.zoomBy(1.4));
     $('zout').addEventListener('click', () => engine.zoomBy(1 / 1.4));
