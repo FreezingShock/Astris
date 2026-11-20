@@ -81,6 +81,8 @@ export const CONFIG = {
   maxMemories: 3,
   /** The map grows: a new constellation is laid out at this share of full size, so that clusters pack close. */
   childScale: 0.78,
+  /** A new constellation clears this share of its own reach of older stars. */
+  clearShare: 1,
   /** The least distance between two stars of the map. */
   starGap: 15,
   /** Past this many stars the oldest outer stars are dropped, outermost first. */

@@ -203,6 +203,7 @@ export class Engine {
       const at = this.world.get(title) ?? { x: from.x, y: from.y };
       con = makeCon(data, at.x, at.y, now, 0);
       con.sc = CONFIG.childScale;
+      this.clear(con);
       this.settle(con);
       this.cons.push(con);
     }
@@ -268,6 +269,51 @@ export class Engine {
     const pw = this.W > CONFIG.wideScreen ? CONFIG.panelWidth : 0;
     const fit = Math.min(this.W - pw - CONFIG.fitMarginX, this.H - CONFIG.fitMarginY) / (CONFIG.fitSpan * (con?.sc ?? 1));
     return Math.max(CONFIG.fitMin, Math.min(CONFIG.fitMax, fit));
+  }
+
+  /**
+   * Make clean room for a new constellation: every star and thread inside the area it will occupy is removed,
+   * except the centres already visited and the race target. A star outside the area stays, and the new
+   * constellation threads to it when it names the same article.
+   */
+  private clear(con: Con): void {
+    const R = CONFIG.rMax * con.sc * CONFIG.clearShare;
+    const keep = new Set<string>(this.cons.map((c) => c.title));
+    keep.add(con.title);
+    if (this.markerTitle) keep.add(this.markerTitle);
+    const gone = new Set<string>();
+    for (const c of this.cons) {
+      for (const n of c.nodes) {
+        if (n.dup || keep.has(n.title)) continue;
+        if (Math.hypot(c.x + n.dx * c.sc - con.x, c.y + n.dy * c.sc - con.y) < R) gone.add(n.title);
+      }
+    }
+    if (!gone.size) return;
+    for (const c of this.cons) {
+      const drop = new Set(c.nodes.filter((n) => gone.has(n.title)));
+      if (!drop.size) continue;
+      c.nodes = c.nodes.filter((n) => !drop.has(n));
+      for (const g of c.groups) g.nodes = g.nodes.filter((n) => !drop.has(n));
+      c.groups = c.groups.filter((g) => g.nodes.length > 0);
+      c.reach = undefined;
+      // a thread that hung from a removed star hangs from the nearest star closer in, or from the centre
+      const maxSq = CONFIG.maxThread * CONFIG.maxThread;
+      for (const n of c.nodes) {
+        if (!n.par || !drop.has(n.par)) continue;
+        let best: StarNode | null = null;
+        let bd = maxSq;
+        for (const p of c.nodes) {
+          if (p === n || p.r >= n.r || p.dup) continue;
+          const d = (p.dx - n.dx) * (p.dx - n.dx) + (p.dy - n.dy) * (p.dy - n.dy);
+          if (d < bd) {
+            bd = d;
+            best = p;
+          }
+        }
+        n.par = best;
+      }
+    }
+    for (const t of gone) this.world.delete(t);
   }
 
   /**
