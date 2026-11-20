@@ -1,13 +1,11 @@
 import type { DataProvider } from '../types';
 import { prefersReducedMotion, subjectDotsHtml, subjectKeyHtml } from '../styles';
 import { MiniMap } from '../engine';
-import { par, type Play } from '../modes';
+import { dailyPair, par, type Play } from '../modes';
 import { articleOf, dispatchPlayLink, isRouteName, pathOf, racePairOf, routeOf, type RouteName } from './router';
 
 /** The article at the centre of the main page's small map. */
 const TODAY = 'Architecture';
-/** Today's race, as shown on the main page. */
-const RACE: [string, string] = ['Brutalist architecture', 'Jazz'];
 /** How many stars the small map shows. */
 const MINI_STARS = 70;
 
@@ -31,13 +29,29 @@ export class Site {
     this.bind();
     $('topicKey').innerHTML = subjectKeyHtml();
     $('topicDots').innerHTML = subjectDotsHtml();
-    void par(provider, RACE[0], RACE[1]).then((d) => {
-      if (d >= 0) $('parText').textContent = 'Par for this pair is ' + d + ' clicks.';
+    // Today's race is the daily pair: the same two articles for every visitor until midnight UTC.
+    const today = dailyPair();
+    document.querySelectorAll<HTMLElement>('.race a').forEach((a, i) => {
+      const title = i === 0 ? today.start : today.target;
+      a.textContent = title;
+      a.dataset.topic = title;
     });
-    void provider.constellation(TODAY).then((data) => {
-      this.mini = new MiniMap($<HTMLCanvasElement>('mini'), { center: data.center, stars: data.stars.slice(0, MINI_STARS) });
-      this.miniTick();
-    });
+    // The page stays readable when the data source cannot be reached: no par line, and a note in place of the small map.
+    par(provider, today.start, today.target).then(
+      (d) => {
+        if (d >= 0) $('parText').textContent = 'Par for this pair is ' + d + ' clicks.';
+      },
+      () => undefined,
+    );
+    provider.constellation(TODAY).then(
+      (data) => {
+        this.mini = new MiniMap($<HTMLCanvasElement>('mini'), { center: data.center, stars: data.stars.slice(0, MINI_STARS) });
+        this.miniTick();
+      },
+      () => {
+        $('miniNote').hidden = false;
+      },
+    );
   }
 
   /** True while the map is the surface on screen. */
@@ -53,12 +67,15 @@ export class Site {
     this.openPlayLink(name);
   }
 
-  /** Act on the query of a /play address: a registered handler first, then a race pair, then a shared article. */
+  /** Act on the query of a /play address: a registered handler first, then the daily race, Connect two, a race pair, and last a shared article. */
   private openPlayLink(name: RouteName): void {
     if (name !== 'play' || dispatchPlayLink(location.search)) return;
     const pair = racePairOf(location.search);
     const article = articleOf(location.search);
-    if (pair) void this.play.startRace(pair.start, pair.target);
+    const query = new URLSearchParams(location.search);
+    if (query.has('daily')) void this.play.startDaily();
+    else if (query.has('connect')) void this.play.startConnect();
+    else if (pair) void this.play.startRace(pair.start, pair.target);
     else if (article) void this.play.open(article);
   }
 
@@ -110,7 +127,7 @@ export class Site {
       }
     });
     document.addEventListener('click', (e) => {
-      const a = (e.target as HTMLElement).closest<HTMLElement>('[data-go],[data-race],[data-random],[data-topic],[data-scroll]');
+      const a = (e.target as HTMLElement).closest<HTMLElement>('[data-go],[data-race],[data-connect],[data-random],[data-topic],[data-scroll]');
       if (!a) return;
       // A modified click on a real link opens a new tab, as links do.
       if (a.hasAttribute('href') && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0)) return;
@@ -127,7 +144,8 @@ export class Site {
       }
       this.go('play');
       const topic = d.topic;
-      if (d.race) setTimeout(() => void this.play.startRace(RACE[0], RACE[1]), 30);
+      if (d.race) setTimeout(() => void this.play.startDaily(), 30);
+      else if (d.connect) setTimeout(() => void this.play.startConnect(), 30);
       else if (d.random) setTimeout(() => void this.play.surprise(), 30);
       else if (topic) setTimeout(() => void this.play.open(topic), 30);
     });

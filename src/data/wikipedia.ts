@@ -9,6 +9,8 @@
  *   summary       REST /page/summary/{title}
  *   random        list=random, article namespace
  * The link lists come back sorted by title or page id, never in article order, so "more like this" sets the score.
+ * Page views would break ties best, but prop=pageviews answers for only about five pages per request, far too many
+ * requests for 120 stars. Article length (prop=info) arrives with the lists for free and stands in for prominence.
  */
 import type { ArticleSummary, Constellation, DataProvider, Star, SubjectId, Suggestion } from '../types';
 import { Http, HttpError, type HttpOptions } from './http';
@@ -38,6 +40,8 @@ interface Page {
   missing?: boolean;
   invalid?: boolean;
   description?: string;
+  /** Article size in bytes, from prop=info. */
+  length?: number;
   thumbnail?: { source?: string };
   categories?: { title: string }[];
 }
@@ -47,6 +51,7 @@ interface Reply {
 }
 interface Candidate {
   description?: string | undefined;
+  length: number;
   out: boolean;
   in: boolean;
   name: boolean;
@@ -78,6 +83,11 @@ export function namesMatch(a: string, b: string): boolean {
   const y = plain(b);
   if (x.length < 3 || y.length < 3) return false;
   return (' ' + x + ' ').includes(' ' + y + ' ') || (' ' + y + ' ').includes(' ' + x + ' ');
+}
+
+/** 0 to 4 for an article's size in bytes, on a log scale: a stub scores near 0, a 100 kB article about 3.2. */
+export function lengthBonus(bytes: number): number {
+  return Math.min(4, (Math.log10(1 + Math.max(0, bytes) / 1000) / 2.5) * 4);
 }
 
 export class WikipediaProvider implements DataProvider {
@@ -201,7 +211,7 @@ export class WikipediaProvider implements DataProvider {
     const subject = this.subjects.get(title) ?? subjectOf({ title, description: page.description, categories: page.categories?.map((c) => c.title) });
     this.subjects.set(title, subject);
 
-    const d = { prop: 'description', redirects: '1' };
+    const d = { prop: 'description|info', redirects: '1' };
     const phrase = title.replace(/\s*\(.*\)$/, '').replace(/"/g, '');
     const [out, into, prefix, inTitle, alike] = await Promise.all([
       this.list({ ...d, generator: 'links', titles: title, gplnamespace: '0', gpllimit: 'max' }, MAX_PAGES, signal),
@@ -216,7 +226,7 @@ export class WikipediaProvider implements DataProvider {
       if (p.title === title || NOISE.has(p.title)) return undefined;
       let c = found.get(p.title);
       if (!c) {
-        c = { description: p.description, out: false, in: false, name: false, nameIndex: 0 };
+        c = { description: p.description, length: p.length ?? 0, out: false, in: false, name: false, nameIndex: 0 };
         found.set(p.title, c);
       }
       return c;
@@ -242,8 +252,9 @@ export class WikipediaProvider implements DataProvider {
     for (const [t, c] of found) {
       const nameMatch = c.name || namesMatch(t, title);
       const starSubject = this.subjects.get(t) ?? subjectOf({ title: t, description: c.description });
-      // Higher is closer: Wikipedia's own "more like this" order first, then a shared subject, then the name search order.
-      const score = (closeness.get(t) ?? 0) * 2 + (starSubject === subject ? 5 : 0) + (c.nameIndex ? 4 - c.nameIndex / 5 : 0);
+      // Higher is closer: Wikipedia's own "more like this" order first, then a shared subject, then the name search order,
+      // and last the article's length, which settles ties in favour of the more developed article.
+      const score = (closeness.get(t) ?? 0) * 2 + (starSubject === subject ? 5 : 0) + (c.nameIndex ? 4 - c.nameIndex / 5 : 0) + lengthBonus(c.length);
       stars.push({ title: t, subject: starSubject, linksOut: c.out, linksIn: c.in, nameMatch, rank: rankOf(c.out, c.in, nameMatch), score });
     }
     stars.sort((a, b) => a.rank - b.rank || b.score - a.score || a.title.localeCompare(b.title));

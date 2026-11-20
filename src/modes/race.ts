@@ -1,13 +1,19 @@
 import type { DataProvider } from '../types';
 import { clock, esc } from '../lib';
+import { dayLabel, type DailyResult } from './daily';
 import { graphOf, route } from './graph';
 
 /** The furthest a par search looks before giving up. */
 export const PAR_DEPTH = 4;
-/** The most articles one par search may ask the provider for. Each can cost several requests on live data. */
-export const PAR_BUDGET = 24;
-/** The smaller budget used to double-check a random pair. */
-const CHECK_BUDGET = 8;
+/**
+ * The most articles one par search may ask the provider for. On live data an article costs about
+ * seven requests and a browser is allowed 200 a minute, so a search has to stay small.
+ */
+export const PAR_BUDGET = 10;
+/** How many new articles a par search asks for at each step, strongest ties first. */
+export const PAR_BEAM = 3;
+/** The smaller budget used to look for a shortcut between a random pair. */
+const CHECK_BUDGET = 3;
 /** The most articles one walk may ask for while looking for a pair. */
 const WALK_BUDGET = 16;
 
@@ -20,11 +26,17 @@ export interface Race {
   t0: number;
   time: number;
   done: boolean;
+  /** Set when this is the daily race: the day it belongs to. */
+  day?: number;
+  /** The reader's best finish for that day, once they have one. */
+  best?: DailyResult;
 }
 
 /** A fresh race, with the clock started. */
-export function beginRace(start: string, target: string, par: number | null, now: number): Race {
-  return { start, target, clicks: 0, par, t0: now, time: 0, done: false };
+export function beginRace(start: string, target: string, par: number | null, now: number, day?: number): Race {
+  const race: Race = { start, target, clicks: 0, par, t0: now, time: 0, done: false };
+  if (day !== undefined) race.day = day;
+  return race;
 }
 
 /** Count one click. Returns true when that click reached the target and finished the race. */
@@ -39,10 +51,11 @@ export function stepRace(race: Race, title: string, now: number): boolean {
 
 /**
  * Fewest clicks found from one article to another, or -1 when no chain was found within maxDepth
- * and the request budget. A par that is returned always belongs to a chain that exists.
+ * and the request budget. A par that is returned always belongs to a chain that exists. The search follows
+ * the strongest ties only, so on a big graph a shorter chain can exist; pass Infinity as the beam to rule that out.
  */
-export async function par(provider: DataProvider, from: string, to: string, maxDepth = PAR_DEPTH, budget = PAR_BUDGET): Promise<number> {
-  const chain = await route(graphOf(provider), from, to, { maxDepth, budget });
+export async function par(provider: DataProvider, from: string, to: string, maxDepth = PAR_DEPTH, budget = PAR_BUDGET, beam = PAR_BEAM): Promise<number> {
+  const chain = await route(graphOf(provider), from, to, { maxDepth, budget, beam });
   return chain ? chain.length - 1 : -1;
 }
 
@@ -93,7 +106,7 @@ export async function randomPair(provider: DataProvider, rand: () => number = Ma
     const start = path[0] ?? '';
     const target = path[path.length - 1] ?? '';
     if (path.length < 2) continue;
-    const short = await route(graphOf(provider), start, target, { maxDepth: path.length - 2, budget: CHECK_BUDGET });
+    const short = await route(graphOf(provider), start, target, { maxDepth: path.length - 2, budget: CHECK_BUDGET, beam: PAR_BEAM });
     const pair = { start, target, par: short ? short.length - 1 : path.length - 1 };
     if (pair.par >= 3) return pair;
     if (!best || pair.par > best.par) best = pair;
@@ -109,26 +122,45 @@ function parText(race: Race): string {
 /** The status card while a random pair is being picked. */
 export const PICKING_HTML = "<div class='line'>Picking two articles…</div>";
 
+const button = (id: string, text: string): string => "<button class='lk' type='button' id='" + id + "'>" + text + '</button>';
+
 /** The status card at the top of the map while a race runs. */
 export function hudHtml(race: Race): string {
-  return race.done
-    ? "<div class='line'>Arrived at <em>" +
-        esc(race.target) +
-        "</em></div><div class='stats'><span>" +
-        race.clicks +
-        (race.clicks === 1 ? ' click' : ' clicks') +
-        '</span><span>' +
-        clock(race.time) +
-        '</span><span>' +
-        parText(race) +
-        "</span><button class='lk' type='button' id='retry'>Same race</button><button class='lk' type='button' id='again'>New race</button><button class='lk' type='button' id='quit'>Keep exploring</button></div>"
-    : "<div class='line'>" +
-        esc(race.start) +
-        ' → <em>' +
-        esc(race.target) +
-        "</em></div><div class='stats'><span id='rc'>" +
-        race.clicks +
-        " clicks</span><span id='rt'>00:00</span><span id='rp'>" +
-        parText(race) +
-        "</span><button class='lk' type='button' id='again'>New race</button><button class='lk' type='button' id='quit'>Quit</button></div>";
+  const daily = race.day !== undefined;
+  const day = race.day === undefined ? '' : "<div class='day'>Daily constellation · " + esc(dayLabel(race.day)) + '</div>';
+  if (!race.done)
+    return (
+      day +
+      "<div class='line'>" +
+      esc(race.start) +
+      ' → <em>' +
+      esc(race.target) +
+      "</em></div><div class='stats'><span id='rc'>" +
+      race.clicks +
+      " clicks</span><span id='rt'>00:00</span><span id='rp'>" +
+      parText(race) +
+      '</span>' +
+      (daily ? button('retry', 'Restart') : button('again', 'New race')) +
+      button('quit', 'Quit') +
+      '</div>'
+    );
+  const best = race.best ? '<span>your best today ' + race.best.clicks + (race.best.clicks === 1 ? ' click' : ' clicks') + ' in ' + clock(race.best.time) + '</span>' : '';
+  return (
+    day +
+    "<div class='line'>Arrived at <em>" +
+    esc(race.target) +
+    "</em></div><div class='stats'><span>" +
+    race.clicks +
+    (race.clicks === 1 ? ' click' : ' clicks') +
+    '</span><span>' +
+    clock(race.time) +
+    '</span><span>' +
+    parText(race) +
+    '</span>' +
+    best +
+    button('retry', 'Same race') +
+    button('again', daily ? 'Random race' : 'New race') +
+    button('quit', 'Keep exploring') +
+    '</div>'
+  );
 }

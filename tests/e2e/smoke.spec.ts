@@ -3,10 +3,12 @@ import { expect, test } from '@playwright/test';
 test('main page', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
+  // Today's race follows the date, so hold the clock on a day whose pair is known.
+  await page.clock.setFixedTime(new Date('2026-11-20T12:00:00Z'));
   await page.goto('/');
   await expect(page.locator('#page-main-page')).toBeVisible();
   await expect(page.locator('.welcome .big')).toContainText('Welcome to Astris');
-  await expect(page.locator('#parText')).toHaveText('Par for this pair is 4 clicks.');
+  await expect(page.locator('#parText')).toHaveText('Par for this pair is 3 clicks.');
   await expect(page.locator('#topicKey .dot')).toHaveCount(12);
   expect(errors).toEqual([]);
 });
@@ -78,4 +80,14 @@ test('phone layout: the menu folds away and nothing overflows', async ({ page })
 test('a shared article link opens that article', async ({ page }) => {
   await page.goto('/play?a=Jazz');
   await expect(page.locator('#panel h1')).toHaveText('Jazz');
+});
+
+test('Connect two is live on the main page and opens in the map', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#vside')).not.toContainText('Connect two (planned)');
+  await page.locator('.vmain a[data-connect]').click();
+  await expect(page).toHaveURL(/\/play/);
+  await expect(page.locator('#modes [data-mode="connect"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.goto('/play?connect=1');
+  await expect(page.locator('#modes [data-mode="connect"]')).toHaveAttribute('aria-pressed', 'true');
 });

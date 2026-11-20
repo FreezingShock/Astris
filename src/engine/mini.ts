@@ -4,7 +4,7 @@ import { CONFIG } from './config';
 import { drawCon } from './draw';
 import { makeCon } from './layout';
 import type { Con } from './model';
-import { sprites } from './sprites';
+import { pixelRatio, sprites } from './sprites';
 
 /** A small self-running constellation with no input, for the main page. */
 export class MiniMap {
@@ -30,7 +30,7 @@ export class MiniMap {
       if (!visible()) return;
       const mini = this.canvas;
       const r = mini.getBoundingClientRect();
-      const d = Math.min(CONFIG.maxPixelRatio, window.devicePixelRatio || 1);
+      const d = pixelRatio();
       if (!r.width) return;
       if (mini.width !== Math.round(r.width * d)) {
         mini.width = Math.round(r.width * d);

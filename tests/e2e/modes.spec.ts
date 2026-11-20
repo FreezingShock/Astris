@@ -28,3 +28,74 @@ test('a race can be finished, run again and replaced with a new one', async ({ p
   await expect(page.locator('#modes [data-mode="explore"]')).toHaveAttribute('aria-pressed', 'true');
   expect(errors).toEqual([]);
 });
+
+test('the daily race starts from its tab, finishes and remembers the best result', async ({ page }) => {
+  await page.goto('/play');
+  await page.locator('#modes [data-mode="daily"]').click();
+  const hud = page.locator('#hud');
+  await expect(hud).toContainText('Daily constellation');
+  await expect(page.locator('#modes [data-mode="daily"]')).toHaveAttribute('aria-pressed', 'true');
+  const target = (await hud.locator('.line em').textContent()) ?? '';
+  expect(target.length).toBeGreaterThan(0);
+  await expect(page.locator('#panel h1')).not.toHaveText('Architecture');
+
+  await page.locator('#gq').fill(target);
+  await expect(page.locator('#gsugg li').first()).toContainText(target);
+  await page.keyboard.press('Enter');
+  await expect(hud).toContainText('Arrived at ' + target);
+  await expect(hud).toContainText('your best today 1 click');
+
+  await hud.locator('#retry').click();
+  await expect(hud.locator('#rc')).toHaveText('0 clicks');
+  await expect(hud).toContainText('Daily constellation');
+  await hud.locator('#quit').click();
+  await expect(hud).toBeHidden();
+});
+
+test("the main page's race is the daily pair and starts the daily race", async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-11-20T12:00:00Z'));
+  await page.goto('/');
+  await expect(page.locator('.race a').nth(0)).toHaveText('Silk Road');
+  await expect(page.locator('.race a').nth(1)).toHaveText('Tokyo');
+  await expect(page.locator('#parText')).toHaveText('Par for this pair is 3 clicks.');
+  await page.locator('#page-main-page .box button[data-race]').click();
+  const hud = page.locator('#hud');
+  await expect(hud).toContainText('Daily constellation · 20 Nov');
+  await expect(hud).toContainText('Silk Road → Tokyo');
+  await expect(hud).toContainText('par 3');
+  await expect(page.locator('#modes [data-mode="daily"]')).toHaveAttribute('aria-pressed', 'true');
+
+  // The same links work when opened in a new tab.
+  await page.goto('/play?daily=1');
+  await expect(page.locator('#hud')).toContainText('Silk Road → Tokyo');
+  await expect(page.locator('#hud')).toContainText('Daily constellation');
+});
+
+test('connect two finds a chain and walks it', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto('/play');
+  await expect(page.locator('#panel h1')).toHaveText('Architecture');
+  await page.locator('#modes [data-mode="connect"]').click();
+  const hud = page.locator('#hud');
+  await expect(hud.locator('input[name="from"]')).toHaveValue('Architecture');
+  await hud.locator('input[name="from"]').fill('Brutalist architecture');
+  await hud.locator('input[name="to"]').fill('Jazz');
+  await hud.locator('button[type="submit"]').click();
+
+  await expect(hud.locator('.chain li')).toHaveText(['Brutalist architecture', 'Architecture', 'History', 'Music', 'Jazz']);
+  await expect(hud).toContainText('4 links');
+  await expect(page.locator('#panel h1')).toHaveText('Brutalist architecture');
+  await expect(hud.locator('.chain li.at')).toHaveText('Jazz', { timeout: 20_000 });
+  await expect(page.locator('#panel h1')).toHaveText('Jazz');
+  await expect(hud.locator('#creplay')).toBeVisible();
+
+  await hud.locator('#cnew').click();
+  await hud.locator('input[name="from"]').fill('Zzqx');
+  await hud.locator('input[name="to"]').fill('Jazz');
+  await hud.locator('button[type="submit"]').click();
+  await expect(hud.locator('.note')).toContainText('No article called');
+  await hud.locator('#quit').click();
+  await expect(hud).toBeHidden();
+  expect(errors).toEqual([]);
+});

@@ -28,16 +28,16 @@
       <button type="submit">Search</button>
     </form>
     <nav class="vlinks" aria-label="Site">
-      <a href="/play" data-go="play">Play</a><a href="/play?race=Brutalist%20architecture|Jazz" data-race="1">Today's race</a><a href="/design-system" data-go="design-system">Design system</a>
+      <a href="/play" data-go="play">Play</a><a href="/play?daily=1" data-race="1">Today's race</a><a href="/design-system" data-go="design-system">Design system</a>
     </nav>
   </header>
 
   <div class="vbody">
     <nav class="vside" id="vside" aria-label="Main menu">
       <h3>Main menu</h3>
-      <ul><li><a href="/" data-go="main-page">Main page</a></li><li><a href="/play" data-go="play">Open the map</a></li><li><a href="/play?race=Brutalist%20architecture|Jazz" data-race="1">Today's race</a></li><li><a href="/play" data-random="1">Random article</a></li></ul>
+      <ul><li><a href="/" data-go="main-page">Main page</a></li><li><a href="/play" data-go="play">Open the map</a></li><li><a href="/play?daily=1" data-race="1">Today's race</a></li><li><a href="/play" data-random="1">Random article</a></li></ul>
       <h3>Modes</h3>
-      <ul><li><a href="/play" data-go="play">Explore</a></li><li><a href="/play?race=Brutalist%20architecture|Jazz" data-race="1">Race</a></li><li>Connect two <small>(planned)</small></li><li>Daily constellation <small>(planned)</small></li><li>Drift <small>(planned)</small></li></ul>
+      <ul><li><a href="/play" data-go="play">Explore</a></li><li><a href="/play?daily=1" data-race="1">Race</a></li><li><a href="/play?connect=1" data-connect="1">Connect two</a></li><li><a href="/play?daily=1" data-race="1">Daily constellation</a></li><li>Drift <small>(planned)</small></li></ul>
       <h3>Project</h3>
       <ul><li><a href="/design-system" data-go="design-system">Design system</a></li><li><a href="https://www.wikipedia.org/">Wikipedia</a></li></ul>
     </nav>
@@ -59,7 +59,7 @@
         <div class="cols">
           <div>
             <div class="box a"><h2>Today's constellation</h2><div class="in">
-              <div class="mini"><canvas id="mini" aria-label="A small glowing constellation around the article Architecture"></canvas></div>
+              <div class="mini"><canvas id="mini" aria-label="A small glowing constellation around the article Architecture"></canvas><p class="mini-note" id="miniNote" hidden><span>Today's constellation could not be loaded just now. <a href="/play" data-go="play">Open the map</a> to try again.</span></p></div>
               <p><b><a href="/play" data-topic="Architecture">Architecture</a></b> and the articles closest to it. The brightest stars link both ways and share its name. Fainter ones are a single link away.</p>
               <p><a href="/play" data-topic="Architecture"><b>Open this constellation</b></a> · <a href="/play" data-random="1">Try a random one</a></p>
             </div></div>
@@ -82,17 +82,17 @@
             </div></div>
             <div class="box a"><h2>Modes</h2><div class="in"><ul>
               <li><b><a href="/play" data-go="play">Explore</a></b> <span class="tag live">live</span><br>Wander. The star you click becomes the centre and the sky regrows around it.</li>
-              <li><b><a href="/play?race=Brutalist%20architecture|Jazz" data-race="1">Race</a></b> <span class="tag live">live</span><br>Two articles, a click counter, a timer and a par.</li>
-              <li><b>Connect two</b> <span class="tag">planned</span><br>Type two topics and watch the shortest chain between them light up.</li>
-              <li><b>Daily constellation</b> <span class="tag">planned</span><br>One pair a day, the same for everyone. Compare paths.</li>
+              <li><b><a href="/play?daily=1" data-race="1">Race</a></b> <span class="tag live">live</span><br>Two articles, a click counter, a timer and a par.</li>
+              <li><b><a href="/play?connect=1" data-connect="1">Connect two</a></b> <span class="tag live">live</span><br>Type two topics and watch the shortest chain between them light up.</li>
+              <li><b><a href="/play?daily=1" data-race="1">Daily constellation</a></b> <span class="tag live">live</span><br>One pair a day, the same for everyone. Compare paths.</li>
               <li><b>Drift</b> <span class="tag">planned</span><br>The map explores itself. A screensaver for the curious.</li>
             </ul></div></div>
-            <div class="box b"><h2>Planned comforts</h2><div class="in"><ul>
-              <li>A link that restores the exact map you are looking at</li>
-              <li>Hover previews with the article's picture and first line</li>
-              <li>Keyboard travel: <span class="mono">/</span> to search, arrows to move between stars</li>
-              <li>A count of every article and subject you have discovered</li>
-              <li>Soft sound on arrival, off by default</li>
+            <div class="box b"><h2>Comforts</h2><div class="in"><ul>
+              <li>Hover previews with the article's picture and first line <span class="tag live">live</span></li>
+              <li>Keyboard travel: <span class="mono">/</span> to search, arrows to move between stars <span class="tag live">live</span></li>
+              <li>A count of every article and subject you have discovered <span class="tag live">live</span></li>
+              <li>A link that restores the exact map you are looking at <span class="tag">planned</span></li>
+              <li>Soft sound on arrival, off by default <span class="tag">planned</span></li>
             </ul></div></div>
           </div>
         </div>
@@ -179,7 +179,7 @@
     <div class="gsearch"><input id="gq" type="text" placeholder="Search Wikipedia" aria-label="Search Wikipedia" autocomplete="off" spellcheck="false"><ul class="gsugg" id="gsugg" role="listbox"></ul></div>
     <div class="modes" id="modes" role="group" aria-label="Mode">
       <button type="button" data-mode="explore" aria-pressed="true">Explore</button><button type="button" data-mode="race" aria-pressed="false">Race</button>
-      <button type="button" data-mode="connect" aria-pressed="false">Connect two<sup>soon</sup></button><button type="button" data-mode="daily" aria-pressed="false">Daily<sup>soon</sup></button><button type="button" data-mode="drift" aria-pressed="false">Drift<sup>soon</sup></button>
+      <button type="button" data-mode="connect" aria-pressed="false">Connect two</button><button type="button" data-mode="daily" aria-pressed="false">Daily</button><button type="button" data-mode="drift" aria-pressed="false">Drift<sup>soon</sup></button>
     </div>
     <div class="right"><button class="gbtn" type="button" id="surprise">Random article</button><a class="lk" data-go="main-page">Main page</a></div>
   </div>

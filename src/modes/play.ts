@@ -3,10 +3,13 @@ import { clock, esc } from '../lib';
 import { subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
 import { Discovery, Share, Tip, initKeyboard } from '../comforts';
+import { Connect, connectHtml, type ConnectState } from './connect';
+import { dailyPair, saveDaily } from './daily';
+import { UNREACHABLE_NOTE, failureOf } from './failure';
 import { legendHtml, panelHtml } from './panel';
 import { PICKING_HTML, beginRace, hudHtml, par, randomPair, stepRace, type Race } from './race';
 
-export type Mode = 'explore' | 'race';
+export type Mode = 'explore' | 'race' | 'daily' | 'connect';
 
 /** Wording that depends on where the data comes from. */
 export interface SourceCopy {
@@ -19,8 +22,6 @@ export interface SourceCopy {
 }
 
 const SOON: Record<string, string> = {
-  connect: 'Connect two is planned: type two topics and the shortest chain between them lights up.',
-  daily: 'Daily constellation is planned: one pair a day, the same for everyone.',
   drift: 'Drift is planned: the map explores itself, like a screensaver.',
 };
 
@@ -43,6 +44,7 @@ export class Play {
   /** Counts race starts, so a slow start that has been overtaken is dropped. */
   private raceSeq = 0;
   private picking = false;
+  private readonly connect: Connect;
   private readonly discovery = new Discovery();
   private readonly tip: Tip;
   private readonly share: Share;
@@ -88,6 +90,24 @@ export class Play {
       },
       onMap: this.isOpen,
       toast: (message) => this.toast(message),
+    });
+    this.connect = new Connect({
+      provider: this.provider,
+      current: () => this.engine.current?.title ?? null,
+      open: async (title) => {
+        const data = await this.load(title);
+        if (data) this.reset(data);
+        return data ? data.center.title : null;
+      },
+      travel: async (title) => {
+        await this.navigate(title);
+        return this.engine.current?.title === title;
+      },
+      mark: (title) => {
+        this.engine.markerTitle = title;
+      },
+      render: (state) => this.connectCard(state),
+      wait: (ms) => new Promise((done) => window.setTimeout(done, ms)),
     });
     this.bind();
   }
@@ -139,26 +159,49 @@ export class Play {
   }
 
   /** Start a race between two articles. Par is searched for in the background unless it is already known. */
-  async startRace(start: string, target: string, knownPar?: number): Promise<void> {
+  async startRace(start: string, target: string, knownPar?: number, day?: number): Promise<void> {
     const seq = ++this.raceSeq;
     this.picking = false;
-    this.setMode('race');
+    this.setMode(day === undefined ? 'race' : 'daily');
     const data = await this.load(start);
     if (seq !== this.raceSeq) return;
     if (!data) {
       if (!this.race) this.setMode('explore');
       return;
     }
-    const race = beginRace(start, target, knownPar ?? null, performance.now());
+    // The provider follows redirects, so race on the titles it actually uses.
+    const race = beginRace(data.center.title, target, knownPar ?? null, performance.now(), day);
     this.race = race;
     this.engine.markerTitle = target;
     this.reset(data);
     this.hud();
+    void this.provider.summary(target).then(
+      (s) => {
+        if (this.race !== race || race.done || !s.title || s.title === race.target) return;
+        race.target = s.title;
+        this.engine.markerTitle = s.title;
+        this.hud();
+      },
+      () => undefined,
+    );
     if (knownPar !== undefined) return;
-    const found = await par(this.provider, start, target);
+    const found = await par(this.provider, race.start, target);
     if (this.race !== race) return;
     race.par = found;
     this.hud();
+  }
+
+  /** Open Connect two, optionally with both articles already chosen. */
+  async startConnect(from?: string, to?: string): Promise<void> {
+    this.setMode('connect');
+    this.connect.start();
+    if (from && to) await this.connect.run(from, to);
+  }
+
+  /** Start today's race: one pair a day, the same for every visitor. */
+  async startDaily(): Promise<void> {
+    const pair = dailyPair();
+    await this.startRace(pair.start, pair.target, undefined, pair.day);
   }
 
   /** Start a race between a freshly picked random pair. */
@@ -183,13 +226,18 @@ export class Play {
   async retryRace(): Promise<void> {
     const race = this.race;
     if (!race) return this.newRace();
-    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined);
+    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, race.day);
   }
 
   setMode(m: Mode): void {
     this.mode = m;
     document.querySelectorAll<HTMLElement>('#modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
-    if (m !== 'race') {
+    if (m !== 'connect' && this.connect.state) {
+      this.connect.stop();
+      this.engine.markerTitle = null;
+      this.hud();
+    }
+    if (m === 'explore' || m === 'connect') {
       this.raceSeq++;
       this.picking = false;
       this.race = null;
@@ -219,8 +267,10 @@ export class Play {
     try {
       const data = await this.provider.constellation(title);
       return seq === this.seq ? data : null;
-    } catch {
-      if (seq === this.seq) this.missing(title);
+    } catch (err) {
+      const why = failureOf(err);
+      if (seq === this.seq && why === 'missing') this.missing(title);
+      else if (seq === this.seq && why === 'unreachable') this.toast(UNREACHABLE_NOTE);
       return null;
     }
   }
@@ -256,13 +306,33 @@ export class Play {
   private travelled(title: string, now: number): void {
     const race = this.race;
     if (!race || race.done) return;
-    if (stepRace(race, title, now)) this.engine.markerTitle = null;
+    if (stepRace(race, title, now)) {
+      this.engine.markerTitle = null;
+      if (race.day !== undefined) race.best = saveDaily(race.day, { clicks: race.clicks, time: race.time });
+    }
     this.hud();
+  }
+
+  private connectCard(state: ConnectState | null): void {
+    const el = $('hud');
+    el.className = state ? 'card on connect' : 'card';
+    if (state) el.innerHTML = connectHtml(state);
+    if (state?.step === 'form') el.querySelector<HTMLInputElement>(state.from ? "input[name='to']" : "input[name='from']")?.focus();
+  }
+
+  /** Fill the Connect two inputs' shared suggestion list as the reader types. */
+  private async connectSuggest(input: HTMLInputElement): Promise<void> {
+    const q = input.value.trim();
+    const seq = ++this.suggestSeq;
+    const found = q ? await this.provider.suggest(q).catch(() => []) : [];
+    const list = document.getElementById('clist');
+    if (list && seq === this.suggestSeq) list.innerHTML = found.map((f) => '<option value="' + esc(f.title) + '"></option>').join('');
   }
 
   private hud(): void {
     const el = $('hud');
     this.share.sync();
+    if (this.connect.state) return;
     if (!this.race) {
       el.className = this.picking ? 'card on' : 'card';
       if (this.picking) el.innerHTML = PICKING_HTML;
@@ -375,11 +445,28 @@ export class Play {
       const soon = SOON[m];
       if (soon) this.toast(soon);
       else if (m === 'race') void this.newRace();
+      else if (m === 'daily') void this.startDaily();
+      else if (m === 'connect') void this.startConnect();
       else this.setMode('explore');
+    });
+    $('hud').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const data = new FormData(e.target as HTMLFormElement);
+      void this.connect.run(String(data.get('from') ?? ''), String(data.get('to') ?? ''));
+    });
+    $('hud').addEventListener('input', (e) => {
+      if (e.target instanceof HTMLInputElement) void this.connectSuggest(e.target);
     });
     $('hud').addEventListener('click', (e) => {
       const id = (e.target as HTMLElement).id;
-      if (id === 'again') void this.newRace();
+      const hop = (e.target as HTMLElement).closest<HTMLElement>('[data-t]')?.dataset.t;
+      if (hop) {
+        this.connect.halt();
+        void this.navigate(hop);
+      } else if (id === 'creplay') void this.connect.replay();
+      else if (id === 'cstop') this.connect.halt();
+      else if (id === 'cnew') this.connect.start();
+      else if (id === 'again') void this.newRace();
       else if (id === 'retry') void this.retryRace();
       else if (id === 'quit') this.setMode('explore');
     });
