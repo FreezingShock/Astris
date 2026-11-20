@@ -294,8 +294,14 @@ export class Play {
       },
       () => undefined,
     );
-    const found = await solvePar(this.provider, race.start, target);
+    // A par search that cannot reach Wikipedia must not leave the race waiting or throw: par is simply unknown.
+    const found = await solvePar(this.provider, race.start, target).catch(() => null);
     if (this.race !== race) return;
+    if (!found) {
+      if (race.par === null) race.par = -1;
+      this.hud();
+      return;
+    }
     if (found.par >= 0 || knownPar === undefined) {
       race.par = found.par;
       race.parExact = found.exact;

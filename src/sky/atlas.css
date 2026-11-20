@@ -98,8 +98,9 @@
   font-size: 11px;
   white-space: nowrap;
 }
-#atlas .at-r.dark {
-  opacity: 0.75;
+/* Dim by lowering the bar, not the text: fading the whole row drops the label below 4.5:1 contrast. */
+#atlas .at-r.dark .at-bar i {
+  opacity: 0.55;
 }
 #atlas .at-bar {
   height: 4px;
@@ -139,14 +140,14 @@
   padding: 8px 10px;
   border: 1px solid var(--night-line);
   border-radius: 10px;
-  opacity: 0.6;
+  border-style: dashed;
 }
 #atlas .at-a span {
   font-size: 11.5px;
   color: var(--dust);
 }
 #atlas .at-a.done {
-  opacity: 1;
+  border-style: solid;
   border-color: rgba(var(--neb-violet-rgb), 0.6);
   box-shadow: 0 0 14px rgba(var(--neb-violet-rgb), 0.25);
 }
