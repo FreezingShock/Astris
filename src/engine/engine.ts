@@ -5,7 +5,7 @@ import { CONFIG } from './config';
 import { drawCon, zoomSize } from './draw';
 import { makeCon } from './layout';
 import type { Camera, Con, PickTarget, Point, StarNode } from './model';
-import { sprites, type Sprites } from './sprites';
+import { pixelRatio, sprites, type Sprites } from './sprites';
 
 const TAU = Math.PI * 2;
 
@@ -62,6 +62,7 @@ export class Engine {
   private last = 0;
   private enabled = false;
   private hover: StarNode | null = null;
+  private ratio = 1;
   private W = 0;
   private H = 0;
   private readonly ptrs = new Map<number, Point>();
@@ -125,7 +126,8 @@ export class Engine {
 
   resize(): void {
     const r = this.canvas.getBoundingClientRect();
-    const d = Math.min(CONFIG.maxPixelRatio, window.devicePixelRatio || 1);
+    const d = pixelRatio();
+    this.ratio = d;
     this.W = r.width;
     this.H = r.height;
     this.canvas.width = Math.round(this.W * d);
@@ -287,11 +289,10 @@ export class Engine {
     cam.z += (tgt.z - cam.z) * k;
     ctx.clearRect(0, 0, W, H);
     const tile = CONFIG.dustTile;
-    const px = -((cam.x * CONFIG.dustParallax) % tile);
-    const py = -((cam.y * CONFIG.dustParallax) % tile);
-    ctx.globalAlpha = CONFIG.dustAlpha;
-    for (let gx = px - tile; gx < W; gx += tile) for (let gy = py - tile; gy < H; gy += tile) ctx.drawImage(sp.dust, gx, gy);
-    ctx.globalAlpha = 1;
+    // snapped to whole screen pixels, so the tile is copied and never resampled
+    const px = -Math.round(((cam.x * CONFIG.dustParallax) % tile) * this.ratio) / this.ratio;
+    const py = -Math.round(((cam.y * CONFIG.dustParallax) % tile) * this.ratio) / this.ratio;
+    for (let gx = px - tile; gx < W; gx += tile) for (let gy = py - tile; gy < H; gy += tile) ctx.drawImage(sp.dust, gx, gy, tile, tile);
 
     // memories slide away and shrink
     for (const c of this.cons) {
