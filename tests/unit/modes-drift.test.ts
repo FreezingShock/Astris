@@ -11,4 +11,7 @@ describe('nextStop', () => {
   it('returns null with no neighbours', () => {
     expect(nextStop([], [], () => 0)).toBeNull();
   });
+  it('favours the closest ties', () => {
+    expect(nextStop(['A', 'B', 'C', 'D'], [], () => 0.5)).toBe('B');
+  });
 });

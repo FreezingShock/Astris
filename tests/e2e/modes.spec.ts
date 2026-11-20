@@ -99,3 +99,12 @@ test('connect two finds a chain and walks it', async ({ page }) => {
   await expect(hud).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test('an empty Connect two field offers the map’s best next stars', async ({ page }) => {
+  await page.goto('/play');
+  await expect(page.locator('#panel h1')).toHaveText('Architecture');
+  await page.locator('#modes [data-mode="connect"]').click();
+  await page.locator('#hud input[name="to"]').focus();
+  await expect(page.locator('#clist option').first()).toHaveAttribute('label', /tie/);
+  expect(await page.locator('#clist option').count()).toBeGreaterThanOrEqual(5);
+});
