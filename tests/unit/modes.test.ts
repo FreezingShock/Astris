@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SampleProvider } from '../../src/data';
+import { Connect, chainBetween, connectHtml, type ConnectHost, type ConnectState } from '../../src/modes/connect';
 import { DAILY_POOL, bestDaily, dailyPair, dayLabel, dayOf, saveDaily } from '../../src/modes/daily';
 import { failureOf } from '../../src/modes/failure';
 import { Graph, graphOf, route } from '../../src/modes/graph';
@@ -270,5 +271,109 @@ describe('the daily race', () => {
     race.best = { clicks: 1, time: 61000 };
     expect(hudHtml(race)).toContain('your best today 1 click in 01:01');
     expect(hudHtml(beginRace('A', 'Z', 3, 0))).not.toContain('Daily');
+  });
+});
+
+describe('connect two', () => {
+  /** A map stand-in on the sample set that records what the mode asked of it. */
+  function host(): ConnectHost & { at: string | null; marks: (string | null)[]; states: ConnectState[] } {
+    const provider = new SampleProvider();
+    const h = {
+      provider,
+      at: null as string | null,
+      marks: [] as (string | null)[],
+      states: [] as ConnectState[],
+      current: () => h.at,
+      open: async (title: string) => {
+        h.at = await provider.constellation(title).then(
+          (c) => c.center.title,
+          () => null,
+        );
+        return h.at;
+      },
+      travel: async (title: string) => {
+        const ok = (await provider.neighbours(h.at ?? '')).includes(title);
+        if (ok) h.at = title;
+        return ok;
+      },
+      mark: (title: string | null) => void h.marks.push(title),
+      render: (state: ConnectState | null) => void (state && h.states.push(state)),
+      wait: () => Promise.resolve(),
+    };
+    return h;
+  }
+
+  it('finds a chain where every link can be clicked', async () => {
+    const provider = new SampleProvider();
+    const chain = (await chainBetween(provider, 'Brutalist architecture', 'Jazz')) ?? [];
+    expect(chain[0]).toBe('Brutalist architecture');
+    expect(chain[chain.length - 1]).toBe('Jazz');
+    expect(chain).toHaveLength(5);
+    expect(await clickable(provider, chain)).toBe(true);
+  });
+
+  it('walks the whole chain, ringing the next star each time', async () => {
+    const h = host();
+    const connect = new Connect(h);
+    connect.start();
+    expect(h.states[0]).toMatchObject({ step: 'form', from: '' });
+    await connect.run(' Brutalist architecture ', 'Jazz');
+    const last = h.states[h.states.length - 1];
+    expect(last).toMatchObject({ step: 'chain', at: 4, walking: false });
+    expect(h.at).toBe('Jazz');
+    expect(h.marks.slice(-5)).toEqual(['Architecture', 'History', 'Music', 'Jazz', null]);
+    expect(h.states.some((s) => s.step === 'searching')).toBe(true);
+
+    await connect.replay();
+    expect(h.at).toBe('Jazz');
+    connect.start();
+    expect(h.states[h.states.length - 1]).toMatchObject({ step: 'form', from: 'Brutalist architecture' });
+  });
+
+  it('goes back to the form with a reason when it cannot connect', async () => {
+    const h = host();
+    const connect = new Connect(h);
+    await connect.run('Zzqx', 'Jazz');
+    expect(h.states[h.states.length - 1]).toMatchObject({ step: 'form', note: 'No article called “Zzqx” was found.' });
+    await connect.run('Jazz', 'Jazz');
+    expect(h.states[h.states.length - 1]).toMatchObject({ step: 'form', note: expect.stringContaining('same article') });
+    await connect.run('Jazz', 'Zzqx');
+    expect(h.states[h.states.length - 1]).toMatchObject({ step: 'form', note: expect.stringContaining('No chain') });
+  });
+
+  it('stops walking when the reader travels somewhere else, and when the mode is left', async () => {
+    const h = host();
+    const connect = new Connect(h);
+    let waits = 0;
+    h.wait = () => {
+      if (++waits === 2) h.at = 'Bauhaus';
+      return Promise.resolve();
+    };
+    await connect.run('Brutalist architecture', 'Jazz');
+    expect(h.states[h.states.length - 1]).toMatchObject({ step: 'chain', at: 1, walking: false });
+    expect(h.at).toBe('Bauhaus');
+
+    const quiet = host();
+    const left = new Connect(quiet);
+    quiet.wait = () => {
+      left.stop();
+      return Promise.resolve();
+    };
+    await left.run('Brutalist architecture', 'Jazz');
+    expect(left.state).toBeNull();
+    expect(quiet.at).toBe('Brutalist architecture');
+  });
+
+  it('draws the form, the wait and the chain, escaping what was typed', () => {
+    const form = connectHtml({ step: 'form', from: 'Rock "n" roll', to: '', note: '<b>' });
+    expect(form).toContain('value="Rock &quot;n&quot; roll"');
+    expect(form).toContain('&lt;b&gt;');
+    expect(connectHtml({ step: 'searching', from: 'A', to: 'Z' })).toContain('Looking for a chain');
+    const chain = connectHtml({ step: 'chain', chain: ['A', 'B', 'Z'], at: 1, walking: true });
+    expect(chain).toContain('<li class=\'past\'><button class="lk" type="button" data-t="A">');
+    expect(chain).toContain("<li class='at'>");
+    expect(chain).toContain('2 links');
+    expect(chain).toContain("id='cstop'");
+    expect(connectHtml({ step: 'chain', chain: ['A', 'Z'], at: 1, walking: false })).toContain('1 link<');
   });
 });

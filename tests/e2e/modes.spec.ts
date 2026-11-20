@@ -70,3 +70,32 @@ test("the main page's race is the daily pair and starts the daily race", async (
   await expect(page.locator('#hud')).toContainText('Silk Road → Tokyo');
   await expect(page.locator('#hud')).toContainText('Daily constellation');
 });
+
+test('connect two finds a chain and walks it', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto('/play');
+  await expect(page.locator('#panel h1')).toHaveText('Architecture');
+  await page.locator('#modes [data-mode="connect"]').click();
+  const hud = page.locator('#hud');
+  await expect(hud.locator('input[name="from"]')).toHaveValue('Architecture');
+  await hud.locator('input[name="from"]').fill('Brutalist architecture');
+  await hud.locator('input[name="to"]').fill('Jazz');
+  await hud.locator('button[type="submit"]').click();
+
+  await expect(hud.locator('.chain li')).toHaveText(['Brutalist architecture', 'Architecture', 'History', 'Music', 'Jazz']);
+  await expect(hud).toContainText('4 links');
+  await expect(page.locator('#panel h1')).toHaveText('Brutalist architecture');
+  await expect(hud.locator('.chain li.at')).toHaveText('Jazz', { timeout: 20_000 });
+  await expect(page.locator('#panel h1')).toHaveText('Jazz');
+  await expect(hud.locator('#creplay')).toBeVisible();
+
+  await hud.locator('#cnew').click();
+  await hud.locator('input[name="from"]').fill('Zzqx');
+  await hud.locator('input[name="to"]').fill('Jazz');
+  await hud.locator('button[type="submit"]').click();
+  await expect(hud.locator('.note')).toContainText('No article called');
+  await hud.locator('#quit').click();
+  await expect(hud).toBeHidden();
+  expect(errors).toEqual([]);
+});

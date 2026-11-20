@@ -351,6 +351,59 @@
   flex-wrap: wrap;
   align-items: baseline;
 }
+#hud .pair {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+#hud .pair input {
+  width: 170px;
+  margin-left: 4px;
+  font-family: var(--serif);
+  font-size: 15px;
+  padding: 4px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 2px;
+  background: rgba(14, 16, 22, 0.8);
+  color: var(--starlight);
+}
+#hud .pair input:focus {
+  outline: none;
+  border-color: var(--neb-blue);
+  box-shadow: 0 0 0 1px var(--neb-blue);
+}
+#hud .note {
+  color: var(--space-redlink);
+  font-size: 12.5px;
+  margin-bottom: 4px;
+}
+#hud .chain {
+  list-style: none;
+  margin: 0 0 4px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-family: var(--serif);
+  font-size: 17px;
+}
+#hud .chain li:not(:last-child)::after {
+  content: ' → ';
+  white-space: pre;
+  color: var(--muted);
+}
+#hud .chain .past .lk {
+  color: var(--space-visited);
+}
+#hud .chain .at .lk {
+  color: var(--neb-rose);
+  text-shadow: 0 0 14px rgba(240, 138, 169, 0.7);
+}
 #hud.win {
   box-shadow:
     0 0 0 1px var(--neb-rose),
@@ -446,5 +499,13 @@
   }
   #play #hud .stats {
     gap: 4px 12px;
+  }
+  #play #hud .pair input {
+    width: 100%;
+    margin: 2px 0 0;
+  }
+  #play #hud .pair label {
+    flex: 1 1 100%;
+    text-align: left;
   }
 }
