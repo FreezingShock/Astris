@@ -3,6 +3,7 @@ import './styles/base.css';
 import './site/site.css';
 import './modes/play.css';
 import './styles/responsive.css';
+import './styles/motion.css';
 
 import { SampleProvider, WikipediaProvider } from './data';
 import { Play, type SourceCopy } from './modes';
