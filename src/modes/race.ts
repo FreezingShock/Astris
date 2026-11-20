@@ -1,6 +1,7 @@
 import type { DataProvider } from '../types';
 import { clock, esc } from '../lib';
 import { dayLabel, type DailyResult } from './daily';
+import { DEFAULT_LEVEL, LEVEL_LABEL, levelPickerHtml, miss, rate, walkSteps, type Level } from './difficulty';
 import { starsText } from './score';
 import type { Recorded } from './stats';
 import { solve, type LinkSource, type Solution } from '../data';
@@ -34,6 +35,8 @@ export interface Race {
   t0: number;
   time: number;
   done: boolean;
+  /** How hard this pair rates, once par is known. */
+  level?: Level;
   /** The score and personal bests of the finished run. */
   result?: Recorded;
   /** One line about the target article, once it has been fetched. */
@@ -168,6 +171,17 @@ export interface Pair {
   start: string;
   target: string;
   par: number;
+  level: Level;
+}
+
+/** How many neighbours an article has, or 0 when it cannot be asked for. Asked once per article. */
+export async function linksOf(provider: DataProvider, title: string): Promise<number> {
+  return (await graphOf(provider).neighbours(title)).length;
+}
+
+/** The level a pair rates, from its par and how well linked the target is. Empty par (-1) rates nothing. */
+export async function levelOf(provider: DataProvider, target: string, par: number): Promise<Level | undefined> {
+  return par < 0 ? undefined : rate(par, await linksOf(provider, target));
 }
 
 /**
@@ -201,20 +215,24 @@ async function wander(provider: DataProvider, steps: number, rand: () => number)
 }
 
 /**
- * Pick a random pair three or four clicks apart. A pair usually costs about a dozen neighbour requests,
- * not a search per candidate: the walk itself proves a chain exists, and one small search looks for a shortcut.
+ * Pick a random pair of the wanted level. A walk of the right length proves a chain exists and one small search
+ * looks for a shortcut; the pair is then rated from its par and the target's links. The first pair that rates
+ * as asked wins, and when none does in a few tries the closest one is used.
+ * A pair usually costs about a dozen neighbour requests, not a search per candidate.
  */
-export async function randomPair(provider: DataProvider, rand: () => number = Math.random): Promise<Pair> {
-  let best: Pair | null = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const path = await wander(provider, rand() < 0.5 ? 3 : 4, rand);
+export async function randomPair(provider: DataProvider, rand: () => number = Math.random, level: Level = DEFAULT_LEVEL): Promise<Pair> {
+  let best: (Pair & { off: number }) | null = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const path = await wander(provider, walkSteps(level, rand), rand);
     const start = path[0] ?? '';
     const target = path[path.length - 1] ?? '';
     if (path.length < 2) continue;
     const short = await route(graphOf(provider), start, target, { maxDepth: path.length - 2, budget: CHECK_BUDGET, beam: PAR_BEAM });
-    const pair = { start, target, par: short ? short.length - 1 : path.length - 1 };
-    if (pair.par >= 3) return pair;
-    if (!best || pair.par > best.par) best = pair;
+    const found = short ? short.length - 1 : path.length - 1;
+    const links = await linksOf(provider, target);
+    const pair = { start, target, par: found, level: rate(found, links), off: miss(level, found, links) + (level !== 'easy' && found < 3 ? 2 : 0) };
+    if (pair.off === 0) return pair;
+    if (!best || pair.off < best.off || (pair.off === best.off && level !== 'easy' && pair.par > best.par)) best = pair;
   }
   if (best) return best;
   throw new Error('No race could be picked.');
@@ -255,7 +273,8 @@ export function verdict(clicks: number, par: number | null): string {
 }
 
 function parText(race: Race): string {
-  return race.par === null ? 'finding par…' : race.par < 0 ? 'par unknown' : (race.parExact === false ? 'par ≤ ' : 'par ') + race.par;
+  const text = race.par === null ? 'finding par…' : race.par < 0 ? 'par unknown' : (race.parExact === false ? 'par ≤ ' : 'par ') + race.par;
+  return race.level ? text + ' · ' + LEVEL_LABEL[race.level].toLowerCase() : text;
 }
 
 /** The score line of a finished race: stars, points, any personal best and the streak. */
@@ -288,7 +307,7 @@ export const PICKING_HTML = "<div class='line'>Picking two articles…</div><div
 const button = (id: string, text: string): string => "<button class='lk' type='button' id='" + id + "'>" + text + '</button>';
 
 /** The status card at the top of the map while a race runs. */
-export function hudHtml(race: Race): string {
+export function hudHtml(race: Race, level: Level = DEFAULT_LEVEL): string {
   const daily = race.day !== undefined;
   const day = race.day === undefined ? '' : "<div class='day'>Daily constellation · " + esc(dayLabel(race.day)) + (race.hard ? ' · hard' : '') + '</div>';
   if (!race.done)
@@ -311,7 +330,7 @@ export function hudHtml(race: Race): string {
       (daily ? button('retry', 'Restart') + button('dtoggle', race.hard ? 'Normal version' : 'Hard version') : button('again', 'New race')) +
       button('quit', 'Quit') +
       '</div>' +
-      (daily ? '' : toolsHtml(race))
+      (daily ? '' : toolsHtml(race) + "<div class='stats'>" + levelPickerHtml(level) + '</div>')
     );
   const best = race.best ? '<span>your best today ' + race.best.clicks + (race.best.clicks === 1 ? ' click' : ' clicks') + ' in ' + clock(race.best.time) + '</span>' : '';
   return (
@@ -338,7 +357,8 @@ export function hudHtml(race: Race): string {
     button('retry', 'Same race') +
     button('again', daily ? 'Random race' : 'New race') +
     button('quit', 'Keep exploring') +
-    '</div>'
+    '</div>' +
+    (daily ? '' : "<div class='stats'>" + levelPickerHtml(level) + '</div>')
   );
 }
 

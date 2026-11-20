@@ -7,6 +7,7 @@ import { Celebration, Discovery, Share, Sound, Tip, Tour, firstLine, initKeyboar
 import { Connect, connectHtml, type ConnectState } from './connect';
 import { dailyPair, dayOf, recent, saveDaily, shareText, streak } from './daily';
 import { recordRun } from './stats';
+import { ratingPar, savedLevel, saveLevel, LEVELS, type Level } from './difficulty';
 import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
 import { diagnose } from '../data';
 import { Journey, JourneyStore, browserStorage, decodePath, savedCon, type JourneyRecord } from '../journey';
@@ -14,7 +15,7 @@ import { OutageScreen } from './outage';
 import { legendHtml, panelHtml, suggestNext } from './panel';
 import { graphOf, route } from './graph';
 import { NO_RULES, REVEAL_BUDGET, loadRules, refusal, revealText, saveRules, type Rules } from './rules';
-import { PAR_BEAM, PAR_DEPTH, PICKING_HTML, beginRace, clockText, expire, hudHtml, solvePar, randomPair, stepRace, type Pair, type Race } from './race';
+import { PAR_BEAM, PAR_DEPTH, PICKING_HTML, beginRace, clockText, expire, hudHtml, levelOf, solvePar, randomPair, stepRace, type Pair, type Race } from './race';
 
 export type Mode = 'explore' | 'race' | 'daily' | 'connect' | 'drift';
 
@@ -49,6 +50,8 @@ export class Play {
   /** Counts race starts, so a slow start that has been overtaken is dropped. */
   private raceSeq = 0;
   private picking = false;
+  /** How hard the next random pair should be. */
+  private level: Level = savedLevel();
   /** A random pair picked ahead of time, so the next new chain starts at once. */
   private ahead: Promise<Pair> | null = null;
   private readonly connect: Connect;
@@ -251,14 +254,22 @@ export class Play {
   }
 
   /** Start a race between two articles. Par is searched for in the background unless it is already known. */
-  async startRace(start: string, target: string, knownPar?: number, day?: number, hard = false, rules: Rules = day === undefined ? loadRules() : NO_RULES): Promise<void> {
+  async startRace(
+    start: string,
+    target: string,
+    knownPar?: number,
+    day?: number,
+    hard = false,
+    rules: Rules = day === undefined ? loadRules() : NO_RULES,
+    level?: Level,
+  ): Promise<void> {
     this.atlas?.close(false);
     this.hideResume();
     this.cancelRestore();
     const seq = ++this.raceSeq;
     this.picking = false;
     this.setMode(day === undefined ? 'race' : 'daily');
-    const data = await this.load(start, () => this.startRace(start, target, knownPar, day, hard, rules));
+    const data = await this.load(start, () => this.startRace(start, target, knownPar, day, hard, rules, level));
     if (seq !== this.raceSeq) return;
     if (!data) {
       if (!this.race) this.setMode('explore');
@@ -266,6 +277,7 @@ export class Play {
     }
     // The provider follows redirects, so race on the titles it actually uses.
     const race = beginRace(data.center.title, target, knownPar ?? null, performance.now(), day, hard, rules);
+    if (level) race.level = level;
     this.race = race;
     this.engine.markerTitle = target;
     this.reset(data);
@@ -290,6 +302,12 @@ export class Play {
     }
     if (found.route) race.route = found.route;
     this.hud();
+    // The rating needs the target's links, one more article to ask for, so it follows the par on the card.
+    if (race.day !== undefined) return;
+    const rated = await levelOf(this.provider, race.target, ratingPar(found)).catch(() => undefined);
+    if (this.race !== race || !rated) return;
+    race.level = rated;
+    this.hud();
   }
 
   /** Open Connect two, optionally with both articles already chosen. */
@@ -309,15 +327,25 @@ export class Play {
 
   /** A random pair: the one picked ahead if there is one, otherwise a fresh pick. */
   private pair(): Promise<Pair> {
-    const next = this.ahead ?? randomPair(this.provider);
+    const next = this.ahead ?? randomPair(this.provider, Math.random, this.level);
     this.ahead = null;
     return next;
+  }
+
+  /** Choose how hard the next random pair is. A pair already picked for another level is dropped. */
+  setLevel(level: Level): void {
+    if (level === this.level) return;
+    this.level = level;
+    saveLevel(level);
+    this.ahead = null;
+    this.hud();
+    if (this.race?.done) this.prepare();
   }
 
   /** Pick the next pair in the background, once. A failed pick is forgotten. */
   private prepare(): void {
     if (this.ahead) return;
-    const pick = randomPair(this.provider);
+    const pick = randomPair(this.provider, Math.random, this.level);
     this.ahead = pick;
     pick.catch(() => {
       if (this.ahead === pick) this.ahead = null;
@@ -345,7 +373,7 @@ export class Play {
     this.hud();
     try {
       const pair = await this.pair();
-      if (seq === this.raceSeq) await this.startRace(pair.start, pair.target, pair.par);
+      if (seq === this.raceSeq) await this.startRace(pair.start, pair.target, pair.par, undefined, false, undefined, pair.level);
     } catch (err) {
       if (seq !== this.raceSeq) return;
       this.setMode('explore');
@@ -395,7 +423,7 @@ export class Play {
   async retryRace(): Promise<void> {
     const race = this.race;
     if (!race) return this.newRace();
-    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, race.day, race.hard, race.rules);
+    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, race.day, race.hard, race.rules, race.level);
   }
 
   /** Drift: the map travels to a neighbouring article every few seconds until the reader acts. */
@@ -785,7 +813,7 @@ export class Play {
       return;
     }
     el.className = 'card on' + (this.race.done ? ' win' : '');
-    el.innerHTML = hudHtml(this.race);
+    el.innerHTML = hudHtml(this.race, this.level);
   }
 
   /* ---------- search ---------- */
@@ -1000,6 +1028,9 @@ export class Play {
     });
     $('hud').addEventListener('click', (e) => {
       const id = (e.target as HTMLElement).id;
+      const lv = (e.target as HTMLElement).closest<HTMLElement>('[data-level]')?.dataset.level;
+      const picked = LEVELS.find((l) => l === lv);
+      if (picked) return this.setLevel(picked);
       const rule = (e.target as HTMLElement).closest<HTMLElement>('[data-rule]')?.dataset.rule;
       if (rule === 'places' || rule === 'backtracks' || rule === 'blitz') return void this.toggleRule(rule);
       const hop = (e.target as HTMLElement).closest<HTMLElement>('[data-t]')?.dataset.t;

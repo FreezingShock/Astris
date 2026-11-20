@@ -7,6 +7,8 @@ export { dailyPair, dayOf, dayLabel, streak, recent, shareText, resultGrid } fro
 export type { DailyPair } from './daily';
 export { chainBetween } from './connect';
 export { nextStop, DRIFT_HTML, DRIFT_MS } from './drift';
+export { LEVELS, LEVEL_LABEL, rate, obscurity } from './difficulty';
+export type { Level } from './difficulty';
 export { scoreRun, starsText, HINT_COST } from './score';
 export type { Score, RunInput } from './score';
 export { loadStats, clearStats, streakOn, recordRun, addRun } from './stats';
