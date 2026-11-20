@@ -1,0 +1,34 @@
+import { chromium } from 'playwright';
+import { spawn } from 'node:child_process';
+const out = '/mnt/project-files/screenshots/feel/';
+const srv = spawn('npx', ['vite', 'preview', '--outDir', 'node_modules/.astris-e2e', '--port', '4999'], { cwd: '/home/claude/Astris' });
+await new Promise((r) => setTimeout(r, 2500));
+const b = await chromium.launch();
+for (const [name, w, h] of [['desktop', 1440, 900], ['phone', 390, 844]]) {
+  const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, colorScheme: 'dark' });
+  const p = await ctx.newPage();
+  await p.goto('http://localhost:4999/play');
+  await p.waitForTimeout(2200);
+  await p.screenshot({ path: out + `tour-step1-${name}.png` });
+  await p.locator('#gq').fill('jazz'); await p.keyboard.press('Enter');
+  await p.waitForTimeout(500);
+  await p.locator('#sky').hover(); await p.mouse.wheel(0, -100);
+  await p.waitForTimeout(300);
+  await p.locator('#gq').focus();
+  await p.waitForTimeout(900);
+  await p.screenshot({ path: out + `tour-last-${name}.png` });
+  await ctx.close();
+  const c2 = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, colorScheme: 'dark' });
+  const q = await c2.newPage();
+  await q.addInitScript(() => localStorage.setItem('astris:tour', 'done'));
+  await q.goto('http://localhost:4999/play?race=Brutalist%20architecture|Jazz');
+  await q.waitForTimeout(2200);
+  await q.screenshot({ path: out + `sound-button-${name}.png` });
+  await q.locator('#gq').fill('jazz'); await q.keyboard.press('Enter');
+  await q.waitForTimeout(450);
+  await q.screenshot({ path: out + `win-burst-${name}.png` });
+  await q.waitForTimeout(2500);
+  await q.screenshot({ path: out + `win-settled-${name}.png` });
+  await c2.close();
+}
+await b.close(); srv.kill();

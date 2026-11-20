@@ -39,3 +39,142 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* ---------- first-visit tutorial ---------- */
+#tour {
+  position: absolute;
+  left: 50%;
+  bottom: 56px;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: none;
+  width: min(380px, calc(100% - 24px));
+  padding: 14px 18px 12px;
+  text-align: left;
+}
+#tour.on {
+  display: block;
+}
+#tour.swap {
+  animation: m-rise var(--dur-slow) var(--ease-out) both;
+}
+#tour b {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 18px;
+  color: var(--link);
+}
+#tour p {
+  margin: 4px 0 10px;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+#tour .tact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+#tour .tact .gbtn {
+  padding: 5px 14px;
+}
+#tour .tdots {
+  float: right;
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+}
+#tour .tdots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rule);
+  transition: background var(--dur-base) var(--ease-out);
+}
+#tour .tdots i.done {
+  background: var(--link);
+  opacity: 0.55;
+}
+#tour .tdots i.cur {
+  background: var(--link);
+  box-shadow: 0 0 8px var(--link);
+}
+.tour-pulse {
+  animation: tour-pulse 1.6s var(--ease-in-out) infinite;
+}
+@keyframes tour-pulse {
+  50% {
+    box-shadow: 0 0 0 4px rgba(var(--neb-blue-rgb), 0.45);
+  }
+}
+
+/* ---------- sound and help buttons ---------- */
+.gbtn.icon {
+  padding: 7px 0;
+  width: 34px;
+  text-align: center;
+}
+#snd[aria-pressed='false'] {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+#snd[aria-pressed='true'] {
+  box-shadow: 0 0 14px rgba(var(--neb-violet-rgb), 0.5);
+}
+
+/* ---------- win celebration ---------- */
+#fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5;
+  pointer-events: none;
+}
+#hud.win {
+  animation: win-pop var(--dur-enter) var(--ease-spring) both;
+}
+#hud.win .stats > * {
+  animation: m-rise var(--dur-slow) var(--ease-out) both;
+}
+#hud.win .stats > :nth-child(2) {
+  animation-delay: var(--stagger);
+}
+#hud.win .stats > :nth-child(3) {
+  animation-delay: calc(var(--stagger) * 2);
+}
+#hud.win .line:nth-child(2) {
+  animation: win-shine 1.6s var(--ease-out) 200ms both;
+}
+@keyframes win-pop {
+  0% {
+    opacity: 0.4;
+    transform: translateX(-50%) scale(0.86);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+@keyframes win-shine {
+  0% {
+    letter-spacing: 0.14em;
+    opacity: 0;
+  }
+  100% {
+    letter-spacing: normal;
+    opacity: 1;
+  }
+}
+@media (max-width: 600px) {
+  #play #hud.win {
+    animation-name: m-rise;
+  }
+}
+
+/* on a phone the footer wraps to two lines, so the tutorial sits above it */
+@media (max-width: 600px) {
+  #tour {
+    bottom: 84px;
+  }
+}
