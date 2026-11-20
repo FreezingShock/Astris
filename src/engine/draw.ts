@@ -95,7 +95,7 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
   ctx.lineWidth = 1;
 
   // the bloom: one ring of light sweeps outward and the new stars appear behind it
-  if (!g && !reduce) {
+  if (!g && !reduce && !con.pending) {
     const u = (now - con.born) / CONFIG.bloomRingMs;
     if (u > 0 && u < 1) {
       const rr = CONFIG.rMax * ease(u) * S;
