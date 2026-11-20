@@ -457,6 +457,7 @@
 }
 #hud .levels {
   display: inline-flex;
+  margin-top: 8px;
   gap: 2px;
   border: 1px solid var(--night-line);
   border-radius: 999px;
