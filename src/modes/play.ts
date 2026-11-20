@@ -346,7 +346,7 @@ export class Play {
       const hit = li ? this.found[Number(li.dataset.i)] : undefined;
       if (hit) this.choose(hit.title);
     });
-    initKeyboard(gq, this.isOpen);
+    initKeyboard(gq, this.isOpen, { map: engine, go: (title) => void this.navigate(title) });
 
     $('surprise').addEventListener('click', () => void this.surprise());
     $('zin').addEventListener('click', () => engine.zoomBy(1.4));
