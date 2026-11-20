@@ -89,6 +89,27 @@ export const CONFIG = {
   visitedCentreScale: 0.55,
   /** Below this zoom the faint outer threads are not drawn. */
   lodThreadZoom: 0.5,
+  /** Adaptive detail: the time between frames, smoothed, above which detail drops and below which it may return. */
+  lodSlowMs: 22,
+  lodFastMs: 18,
+  /** Frames of steady speed before detail is raised again. */
+  lodCalm: 150,
+  /** Frames between two changes of detail, and the highest level. */
+  lodHold: 24,
+  lodMax: 3,
+  /** Past the highest level the canvas is drawn at a lower pixel ratio, by this step each time, down to this share. */
+  shrinkStep: 0.75,
+  shrinkMin: 0.5,
+  /** Panning and zooming never draw above this detail level of the quiet map, so that they stay smooth. */
+  lodMoving: 1,
+  /** Glow of rank 4 and 5 stars at detail levels 2 and 3. */
+  lodGlow: 0.55,
+  /** How fast a pan keeps gliding after the pointer lets go, and how soon it stops. */
+  glideDecay: 0.006,
+  glideMin: 0.00002,
+  /** A new centre keeps the reader's zoom when it is within this range of the fitted zoom. */
+  keepZoomLow: 0.7,
+  keepZoomHigh: 1.5,
   /** Threads from rank-4 and rank-5 stars that were already on the map are not drawn. */
   dupThreadMaxRank: 3,
   dissolveMs: 430,

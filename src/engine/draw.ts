@@ -11,6 +11,8 @@ export interface DrawOptions {
   mini?: boolean;
   /** Share of the full centre-star size, for the centres of constellations already visited. */
   centreScale?: number;
+  /** Detail level 0 (everything) to 3 (fewest stars). */
+  lod?: number;
 }
 
 const TAU = Math.PI * 2;
@@ -18,6 +20,53 @@ const TAU = Math.PI * 2;
 /** How much stars and titles grow with the zoom: its square root, clamped. */
 export function zoomSize(scale: number): number {
   return Math.max(CONFIG.zoomSizeMin, Math.min(CONFIG.zoomSizeMax, Math.sqrt(scale)));
+}
+
+/** Stroke the threads of a constellation, batched by subject and rank. `fade` is set while it dissolves into a memory. */
+function strokeThreads(
+  ctx: CanvasRenderingContext2D,
+  con: Con,
+  cx: number,
+  cy: number,
+  S: number,
+  now: number,
+  reduce: boolean,
+  w: number,
+  h: number,
+  via: Con['nodes'][number] | null,
+  fade: number | null,
+): void {
+  for (const G of con.groups) {
+    const ta = (CONFIG.threadAlpha[G.rank] ?? 0) * (fade !== null ? (G.rank <= CONFIG.memoryKeepRank ? con.dim : fade) : con.dim);
+    if (ta < CONFIG.threadCutoff) continue;
+    if (G.rank > CONFIG.dupThreadMaxRank && S < CONFIG.lodThreadZoom) continue;
+    ctx.strokeStyle = 'rgba(' + subjectRgb(G.subject) + ',' + ta + ')';
+    ctx.beginPath();
+    for (const o of G.nodes) {
+      const p = reduce ? 1 : ease((now - (o.born - CONFIG.threadDrawMs)) / CONFIG.threadDrawMs);
+      if (p <= 0 || (via && (o === via || o.par === via)) || (o.dup && o.rank > CONFIG.dupThreadMaxRank)) continue;
+      const ax = o.par ? cx + o.par.dx * S : cx;
+      const ay = o.par ? cy + o.par.dy * S : cy;
+      const bx = cx + o.dx * S;
+      const by = cy + o.dy * S;
+      if ((ax < 0 && bx < 0) || (ax > w && bx > w) || (ay < 0 && by < 0) || (ay > h && by > h)) continue;
+      const mx = (ax + bx) / 2 - (by - ay) * o.bend;
+      const my = (ay + by) / 2 + (bx - ax) * o.bend;
+      const qx = ax + (mx - ax) * p;
+      const qy = ay + (my - ay) * p;
+      const ex = qx + (mx + (bx - mx) * p - qx) * p;
+      const ey = qy + (my + (by - my) * p - qy) * p;
+      ctx.moveTo(ax, ay);
+      ctx.quadraticCurveTo(qx, qy, ex, ey);
+    }
+    ctx.stroke();
+  }
+}
+
+/** How far the farthest star is from the centre, in unscaled units. Cleared when stars are dropped. */
+export function reachOf(con: Con): number {
+  if (con.reach === undefined) con.reach = con.nodes.reduce((m, n) => Math.max(m, Math.hypot(n.dx, n.dy)), 0) + 8;
+  return con.reach;
 }
 
 /** Draw one constellation into any 2D context. Returns the number of stars drawn. */
@@ -33,6 +82,14 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
   const via = g ? g.via : null;
   con.cx = cx;
   con.cy = cy;
+  // a constellation wholly off screen costs nothing: it is not walked at all
+  const reach = reachOf(con) * S + CONFIG.cullMargin;
+  con.vis = !(cx + reach < 0 || cy + reach < 0 || cx - reach > w || cy - reach > h);
+  if (!con.vis && !opt.mini) {
+    con.count = 0;
+    return 0;
+  }
+  const lod = opt.lod ?? 0;
   if (con.dim < CONFIG.dimCutoff && gfade <= 0) return 0;
   ctx.globalCompositeOperation = 'lighter';
   ctx.lineWidth = 1;
@@ -57,32 +114,8 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
     }
   }
 
-  // threads, batched by subject and rank
-  for (const G of con.groups) {
-    const ta = (CONFIG.threadAlpha[G.rank] ?? 0) * (g ? (G.rank <= CONFIG.memoryKeepRank ? con.dim : gfade) : con.dim);
-    if (ta < CONFIG.threadCutoff) continue;
-    if (G.rank > CONFIG.dupThreadMaxRank && S < CONFIG.lodThreadZoom) continue;
-    ctx.strokeStyle = 'rgba(' + subjectRgb(G.subject) + ',' + ta + ')';
-    ctx.beginPath();
-    for (const o of G.nodes) {
-      const p = reduce ? 1 : ease((now - (o.born - CONFIG.threadDrawMs)) / CONFIG.threadDrawMs);
-      if (p <= 0 || (via && (o === via || o.par === via)) || (o.dup && o.rank > CONFIG.dupThreadMaxRank)) continue;
-      const ax = o.par ? cx + o.par.dx * S : cx;
-      const ay = o.par ? cy + o.par.dy * S : cy;
-      const bx = cx + o.dx * S;
-      const by = cy + o.dy * S;
-      if ((ax < 0 && bx < 0) || (ax > w && bx > w) || (ay < 0 && by < 0) || (ay > h && by > h)) continue;
-      const mx = (ax + bx) / 2 - (by - ay) * o.bend;
-      const my = (ay + by) / 2 + (bx - ax) * o.bend;
-      const qx = ax + (mx - ax) * p;
-      const qy = ay + (my - ay) * p;
-      const ex = qx + (mx + (bx - mx) * p - qx) * p;
-      const ey = qy + (my + (by - my) * p - qy) * p;
-      ctx.moveTo(ax, ay);
-      ctx.quadraticCurveTo(qx, qy, ex, ey);
-    }
-    ctx.stroke();
-  }
+  // threads
+  strokeThreads(ctx, con, cx, cy, S, now, reduce, w, h, via, g ? gfade : null);
 
   let shown = 0;
   const m = CONFIG.cullMargin;
@@ -118,8 +151,13 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
     }
     o.on = true;
     if (o.dup) continue;
-    const tw = reduce ? 1 : 1 + Math.sin(now * CONFIG.twinkleSpeed * o.sp + o.ph) * CONFIG.twinkleAmount;
-    const d = (CONFIG.size[o.rank] ?? 0) * zs * s * tw * CONFIG.glowScale;
+    if (lod >= 3 && o.rank === 5) {
+      o.on = false;
+      continue;
+    }
+    const far = lod >= 2 && o.rank >= 4;
+    const tw = reduce || far ? 1 : 1 + Math.sin(now * CONFIG.twinkleSpeed * o.sp + o.ph) * CONFIG.twinkleAmount;
+    const d = (CONFIG.size[o.rank] ?? 0) * zs * s * tw * CONFIG.glowScale * (far ? CONFIG.lodGlow : 1);
     ctx.globalAlpha = al * (CONFIG.starAlpha[o.rank] ?? 0) * Math.min(1, s);
     ctx.drawImage(sp.glow(o.subject), sx - d, sy - d, d * 2, d * 2);
     if (o.rank <= CONFIG.coreRank) {
@@ -129,7 +167,7 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
   }
 
   // points of light running inward along threads
-  if (!reduce && opt.pulses && !g) {
+  if (!reduce && opt.pulses && !g && lod < 1) {
     if (con.pulses.length < opt.pulses) con.pulses.push({ n: null, t0: now + con.pulses.length * CONFIG.pulseStaggerMs });
     for (const pu of con.pulses) {
       const u = (now - pu.t0) / CONFIG.pulseMs;

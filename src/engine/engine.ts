@@ -51,6 +51,16 @@ export class Engine {
   trail: string[] = [];
   /** A star to ring with a dashed marker, used by Race for its target. */
   markerTitle: string | null = null;
+  /** The time one frame spends drawing, smoothed, in milliseconds. */
+  get frameMs(): number {
+    return this.cost;
+  }
+
+  /** Detail now being drawn, 0 (everything) to lodMax. */
+  get detail(): number {
+    return this.lod;
+  }
+
   /** True while the frame loop runs. */
   running = false;
 
@@ -73,6 +83,18 @@ export class Engine {
   private moved = 0;
   private lastP: Point = { x: 0, y: 0 };
   private pinch = 0;
+  /** Drawing detail 0 to lodMax, and the smoothed time one frame spends drawing. */
+  private lod = 0;
+  private last0 = 0;
+  private calm = 0;
+  /** Share of the screen's pixel ratio drawn at, lowered when even the lowest detail is too slow. */
+  private shrink = 1;
+  private cost = 0;
+  private hold = 0;
+  /** Pan velocity in map units per millisecond, for the glide after a drag. */
+  private vel: Point = { x: 0, y: 0 };
+  private velAt = 0;
+  private moving = 0;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -135,7 +157,7 @@ export class Engine {
 
   resize(): void {
     const r = this.canvas.getBoundingClientRect();
-    const d = pixelRatio();
+    const d = pixelRatio() * this.shrink;
     this.ratio = d;
     this.W = r.width;
     this.H = r.height;
@@ -188,7 +210,8 @@ export class Engine {
     this.trail.push(title);
     if (this.trail.length > CONFIG.trailLength) this.trail.shift();
     this.trim(con);
-    this.tgt.z = this.fitZ(con);
+    const fit = this.fitZ(con);
+    this.tgt.z = Math.max(fit * CONFIG.keepZoomLow, Math.min(fit * CONFIG.keepZoomHigh, this.tgt.z));
     this.tgt.x = con.x + this.focusOffset();
     this.tgt.y = con.y;
     this.hover = null;
@@ -290,6 +313,7 @@ export class Engine {
         for (const n of gone) this.world.delete(n.title);
         const drop = new Set(c.nodes.filter((n) => n.rank === rank));
         c.nodes = c.nodes.filter((n) => !drop.has(n));
+        c.reach = undefined;
         for (const g of c.groups) g.nodes = g.nodes.filter((n) => !drop.has(n));
         c.groups = c.groups.filter((g) => g.nodes.length > 0);
       }
@@ -304,8 +328,12 @@ export class Engine {
     if (!this.running) return;
     const { ctx, cam, tgt, reduce, W, H, sp, colors } = this;
     const cur = this.current;
+    const t0 = performance.now();
     const dt = Math.min(CONFIG.maxFrameMs, now - (this.last || now));
     this.last = now;
+    this.glide(dt);
+    const still = Math.abs(tgt.x - cam.x) + Math.abs(tgt.y - cam.y) < CONFIG.settlePan * 4 && Math.abs(tgt.z - cam.z) < CONFIG.settleZoom * 8;
+    const level = still && !this.ptrs.size && this.moving === 0 ? this.lod : Math.max(this.lod, CONFIG.lodMoving);
     const k = reduce ? 1 : 1 - Math.exp(-dt * CONFIG.cameraEase);
     cam.x += (tgt.x - cam.x) * k;
     cam.y += (tgt.y - cam.y) * k;
@@ -332,7 +360,7 @@ export class Engine {
     this.cons = this.cons.filter((c) => !(c.gone && c.dim < CONFIG.goneCutoff));
     let total = 0;
     const live = this.cons.filter((c) => !c.gone);
-    for (const c of live) if (c !== cur) total += drawCon(ctx, c, cam, now, W, H, { pulses: 0, centreScale: CONFIG.visitedCentreScale }, sp, reduce);
+    for (const c of live) if (c !== cur) total += drawCon(ctx, c, cam, now, W, H, { pulses: 0, centreScale: CONFIG.visitedCentreScale, lod: level }, sp, reduce);
 
     // the trail you left, from memory to memory to here
     ctx.globalCompositeOperation = 'lighter';
@@ -352,7 +380,7 @@ export class Engine {
     ctx.setLineDash([]);
     ctx.lineWidth = 1;
     ctx.globalCompositeOperation = 'source-over';
-    if (cur) total += drawCon(ctx, cur, cam, now, W, H, { pulses: CONFIG.pulses }, sp, reduce);
+    if (cur) total += drawCon(ctx, cur, cam, now, W, H, { pulses: CONFIG.pulses, lod: level }, sp, reduce);
 
     // marker around one star, used for the race target
     if (this.markerTitle && cur) {
@@ -391,6 +419,7 @@ export class Engine {
     ctx.textAlign = 'left';
     const titled = cur ? [cur, ...live.filter((c) => c !== cur)] : [];
     for (const c of titled) {
+      if (c.vis === false) continue;
       for (let j0 = 0; j0 < c.nodes.length && placed < CONFIG.maxLabels; j0++) {
         const n = c.nodes[j0];
         if (!n || !n.on || n.dup || n.a < CONFIG.labelMinGrow || n === this.hover) continue;
@@ -428,6 +457,8 @@ export class Engine {
       ctx.stroke();
     }
     this.events.onFrame?.({ stars: total, memories: live.length - 1 }, now);
+    this.adapt(this.last0 ? now - this.last0 : 0, performance.now() - t0);
+    this.last0 = now;
     const settled = Math.abs(tgt.x - cam.x) + Math.abs(tgt.y - cam.y) < CONFIG.settlePan && Math.abs(tgt.z - cam.z) < CONFIG.settleZoom;
     if (reduce && settled && !this.cons.some((c) => c.gm || Math.abs(c.dim - c.dimT) > CONFIG.settleDim)) {
       this.running = false;
@@ -435,6 +466,56 @@ export class Engine {
     }
     this.raf = requestAnimationFrame(this.frame);
   };
+
+  /** Keep a pan gliding after the pointer lets go, slowing smoothly to a stop. */
+  private glide(dt: number): void {
+    const v = this.vel;
+    if (this.reduce || this.ptrs.size || Math.abs(v.x) + Math.abs(v.y) < CONFIG.glideMin) {
+      if (!this.ptrs.size || this.reduce) v.x = v.y = 0;
+      this.moving = Math.max(0, this.moving - 1);
+      return;
+    }
+    const f = Math.exp(-dt * CONFIG.glideDecay);
+    this.tgt.x -= v.x * dt;
+    this.tgt.y -= v.y * dt;
+    this.cam.x -= v.x * dt;
+    this.cam.y -= v.y * dt;
+    v.x *= f;
+    v.y *= f;
+    this.moving = 3;
+  }
+
+  /**
+   * Adaptive detail: when drawing takes too long, drop the faintest stars and their light, and bring them back
+   * when there is time to spare.
+   */
+  private adapt(gap: number, ms: number): void {
+    // the time between frames is what the reader feels; drawing time alone misses the work done after the calls are made
+    const felt = Math.max(gap, ms);
+    if (gap > 250) this.calm = 0;
+    else this.cost = this.cost ? this.cost * 0.9 + felt * 0.1 : felt;
+    if (this.hold > 0) this.hold--;
+    else if (this.cost > CONFIG.lodSlowMs && this.lod < CONFIG.lodMax) {
+      this.lod++;
+      this.hold = CONFIG.lodHold;
+    } else if (this.cost > CONFIG.lodSlowMs * 1.5 && this.shrink > CONFIG.shrinkMin && pixelRatio() > 1) {
+      this.shrink = Math.max(CONFIG.shrinkMin, this.shrink * CONFIG.shrinkStep);
+      this.hold = CONFIG.lodHold * 2;
+      this.resize();
+    } else if (this.cost < CONFIG.lodFastMs && ++this.calm < CONFIG.lodCalm) {
+      // wait for a calm stretch before asking for more detail
+    } else if (this.cost < CONFIG.lodFastMs && this.shrink < 1) {
+      this.shrink = Math.min(1, this.shrink / CONFIG.shrinkStep);
+      this.calm = 0;
+      this.hold = CONFIG.lodHold * 2;
+      this.resize();
+    } else if (this.cost < CONFIG.lodFastMs && this.lod > 0) {
+      this.lod--;
+      this.calm = 0;
+      this.hold = CONFIG.lodHold;
+    }
+    if (this.cost >= CONFIG.lodFastMs) this.calm = 0;
+  }
 
   /* ---------- pointer ---------- */
 
@@ -450,6 +531,7 @@ export class Engine {
     let bd = CONFIG.pickRadius * CONFIG.pickRadius;
     // the live constellation first, so that it wins a tie
     for (const c of [cur, ...this.cons.filter((x) => x !== cur && !x.gone)]) {
+      if (c.vis === false) continue;
       for (const n of c.nodes) {
         if (!n.on || n.a < CONFIG.pickMinGrow) continue;
         const d = (n.sx - p.x) * (n.sx - p.x) + (n.sy - p.y) * (n.sy - p.y);
@@ -485,6 +567,8 @@ export class Engine {
       this.moved = 0;
       this.lastP = p;
       this.pinch = 0;
+      this.vel = { x: 0, y: 0 };
+      this.velAt = performance.now();
       sky.classList.add('drag');
     });
     sky.addEventListener('pointermove', (e) => {
@@ -516,6 +600,10 @@ export class Engine {
       this.tgt.y -= dy;
       this.cam.x -= dx;
       this.cam.y -= dy;
+      const tNow = performance.now();
+      const span = Math.max(1, tNow - this.velAt);
+      this.vel = { x: this.vel.x * 0.6 + (dx / span) * 0.4, y: this.vel.y * 0.6 + (dy / span) * 0.4 };
+      this.velAt = tNow;
       this.moved += Math.abs(p.x - this.lastP.x) + Math.abs(p.y - this.lastP.y);
       this.lastP = p;
       this.kick();
@@ -524,6 +612,8 @@ export class Engine {
       const had = this.ptrs.delete(e.pointerId);
       this.pinch = 0;
       sky.classList.remove('drag');
+      if (this.moved < CONFIG.clickSlop || performance.now() - this.velAt > 80 || this.ptrs.size > 0) this.vel = { x: 0, y: 0 };
+      else this.kick();
       if (had && this.moved < CONFIG.clickSlop && e.type === 'pointerup') {
         const o = this.pick(this.at(e));
         if (o) this.events.onPick?.(o.kind === 'star' ? o.node.title : o.con.title);
