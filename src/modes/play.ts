@@ -150,6 +150,7 @@ export class Play {
 
   /** Start over from one article, in Explore unless told otherwise. */
   async open(title: string, explore = true): Promise<void> {
+    this.atlas?.close(false);
     if (explore) this.setMode('explore');
     const data = await this.load(title);
     if (data) this.reset(data);
@@ -174,6 +175,7 @@ export class Play {
 
   /** Travel to a random article, leaving a race if one is running. */
   async surprise(): Promise<void> {
+    this.atlas?.close(false);
     const cur = this.engine.current;
     let t: string;
     let n = 0;
@@ -190,6 +192,7 @@ export class Play {
 
   /** Start a race between two articles. Par is searched for in the background unless it is already known. */
   async startRace(start: string, target: string, knownPar?: number, day?: number, hard = false, rules: Rules = day === undefined ? loadRules() : NO_RULES): Promise<void> {
+    this.atlas?.close(false);
     const seq = ++this.raceSeq;
     this.picking = false;
     this.setMode(day === undefined ? 'race' : 'daily');
@@ -229,6 +232,7 @@ export class Play {
 
   /** Open Connect two, optionally with both articles already chosen. */
   async startConnect(from?: string, to?: string): Promise<void> {
+    this.atlas?.close(false);
     this.setMode('connect');
     this.connect.start();
     if (from && to) await this.connect.run(from, to);
@@ -236,6 +240,7 @@ export class Play {
 
   /** Start today's race: one pair a day, the same for every visitor. */
   async startDaily(hard = false): Promise<void> {
+    this.atlas?.close(false);
     const pair = dailyPair(undefined, hard);
     await this.startRace(pair.start, pair.target, undefined, pair.day, hard);
   }
@@ -333,6 +338,7 @@ export class Play {
 
   /** Drift: the map travels to a neighbouring article every few seconds until the reader acts. */
   startDrift(): void {
+    this.atlas?.close(false);
     this.setMode('drift');
     this.hud();
     const step = async (): Promise<void> => {
@@ -355,6 +361,7 @@ export class Play {
   }
 
   setMode(m: Mode): void {
+    this.atlas?.close(false);
     if (m !== 'drift') clearTimeout(this.driftTimer);
     this.mode = m;
     document.querySelectorAll<HTMLElement>('#modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
@@ -527,6 +534,7 @@ export class Play {
   }
 
   private choose(title: string): void {
+    this.atlas?.close(false);
     this.clearSearch();
     if (this.engine.current) void this.navigate(title);
   }
@@ -649,14 +657,27 @@ export class Play {
     document.addEventListener('keydown', (e) => {
       const t = e.target;
       const typing = t instanceof HTMLElement && (t.isContentEditable || t.matches('input, textarea, select, button, a'));
-      if (e.key === 'n' && this.isOpen() && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key === 'n' && this.isOpen() && !this.atlas?.isOpen && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         void this.newChain();
       }
     });
     const atlas = new Atlas({ collection: this.collection, open: (title) => void this.open(title) });
     this.atlas = atlas;
-    $('skyBtn').addEventListener('click', () => (atlas.isOpen ? atlas.close() : atlas.open()));
+    $('skyBtn').addEventListener('click', () => {
+      if (atlas.isOpen) return atlas.close();
+      if (this.tour.open) this.tour.finish();
+      atlas.open();
+    });
+    // The atlas is a sheet over the map: anything outside it, or Escape, puts it away.
+    document.addEventListener('pointerdown', (e) => {
+      const t = e.target;
+      if (atlas.isOpen && t instanceof Element && !t.closest('#atlas, #skyBtn')) atlas.close(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && atlas.isOpen) atlas.close();
+    });
+    this.gq.addEventListener('focus', () => atlas.close(false));
     $('surprise').addEventListener('click', () => void this.surprise());
     const snd = $('snd');
     const paintSound = (): void => {
@@ -669,7 +690,10 @@ export class Play {
       this.sound.set(!this.sound.enabled);
       paintSound();
     });
-    $('tourbtn').addEventListener('click', () => this.tour.start());
+    $('tourbtn').addEventListener('click', () => {
+      this.atlas?.close(false);
+      this.tour.start();
+    });
     $('zin').addEventListener('click', () => engine.zoomBy(1.4));
     $('zout').addEventListener('click', () => engine.zoomBy(1 / 1.4));
     $('zfit').addEventListener('click', () => engine.fit());

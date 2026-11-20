@@ -40,12 +40,6 @@ export class Atlas {
     this.tip = root.querySelector<HTMLElement>('#atTip') as HTMLElement;
     this.closeBtn = root.querySelector<HTMLButtonElement>('#atClose') as HTMLButtonElement;
     this.closeBtn.addEventListener('click', () => this.close());
-    root.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        this.close();
-      }
-    });
     root.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-open]');
       if (b?.dataset.open) {
