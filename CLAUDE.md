@@ -6,18 +6,18 @@ The full plan is the Astris Build Spec. `reference/mockup.html` is the source of
 
 ## Commands
 
-| Command             | What it does                                                         |
-| ------------------- | -------------------------------------------------------------------- |
-| `npm run dev`       | Local server with hot reload                                         |
-| `npm run typecheck` | `tsc --noEmit`, strict                                               |
-| `npm run lint`      | ESLint, Prettier check, and the hex-colour check                     |
-| `npm run format`    | Prettier write                                                       |
-| `npm test`          | Vitest unit tests in `tests/unit`                                    |
-| `npm run build`     | Production build into `dist/`                                        |
-| `npm run test:e2e`  | Playwright smoke tests in `tests/e2e`, run against the built preview |
-| `npm run ci`        | All of the above, in the order the `ci` check runs them              |
+| Command             | What it does                                                                      |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `npm run dev`       | Local server with hot reload                                                      |
+| `npm run typecheck` | `tsc --noEmit`, strict                                                            |
+| `npm run lint`      | ESLint, Prettier check, and the hex-colour check                                  |
+| `npm run format`    | Prettier write                                                                    |
+| `npm test`          | Vitest unit tests in `tests/unit`                                                 |
+| `npm run build`     | Production build into `dist/`                                                     |
+| `npm run test:e2e`  | Playwright smoke tests in `tests/e2e`, run against their own build on sample data |
+| `npm run ci`        | All of the above, in the order the `ci` check runs them                           |
 
-Run `npm run build` before `npm run test:e2e`. Playwright is pinned to 1.63.0.
+`npm run test:e2e` builds its own copy with `VITE_DATA=sample`, so the smoke tests never call Wikipedia. Playwright is pinned to 1.63.0.
 
 ## Layout and ownership
 
