@@ -177,8 +177,17 @@ export class Play {
     if (!this.tour.seen && !this.tour.open && !location.search) this.tour.start();
   }
 
+  /** Keep where the view is with this tab's journey. */
+  private saveView(): void {
+    // While a travel is loading the camera is leaning in, so its zoom is not one worth keeping.
+    if (this.restoring || !this.engine.current || this.engine.loading) return;
+    const v = this.engine.view;
+    this.journey.setView(v.x, v.y, v.z);
+  }
+
   /** The map route closed. */
   leave(): void {
+    this.saveView();
     this.atlas?.close(false);
     this.engine.disable();
   }
@@ -642,6 +651,9 @@ export class Play {
     else this.journey.adoptPath(shown);
     const cur = this.engine.current;
     if (cur) this.changed(cur);
+    // A whole saved journey also brings back where the view was left, panned and zoomed.
+    const v = rec && shown.length === path.length ? rec.view : undefined;
+    if (v) this.engine.setView({ x: v[0], y: v[1], z: v[2] });
     if (failed) this.toast('Wikipedia did not answer for “' + failed + '”. Rebuilt ' + shown.length + ' of ' + path.length + ' stops.');
     else if (skipped) this.toast(skipped + (skipped === 1 ? ' article' : ' articles') + ' no longer exist and were skipped.');
   }
@@ -1006,7 +1018,10 @@ export class Play {
       else if (id === 'quit') this.setMode('explore');
     });
 
+    // The view is saved only when the page is put away: a refresh, a closed tab or a tab switch.
+    window.addEventListener('pagehide', () => this.saveView());
     document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.saveView();
       if (document.hidden) engine.stop();
       else if (this.isOpen()) engine.kick();
     });
