@@ -187,7 +187,7 @@ export class Engine {
       const far = Math.max(d, CONFIG.memoryDistance);
       c.gm = { t0: now, x0: c.x, y0: c.y, x1: wx + Math.cos(a) * far, y1: wy + Math.sin(a) * far, s0: c.sc, s1: c === from ? CONFIG.memoryScale : c.sc * CONFIG.olderMemoryScale };
       if (!c.ghost) {
-        c.ghost = { t0: now };
+        c.ghost = { t0: now, via: c === from ? (star ?? null) : null };
         c.dimT = CONFIG.memoryDim;
         c.pulses = [];
         for (const n of c.nodes) {
@@ -462,8 +462,11 @@ export class Engine {
       const p = this.at(e);
       if (!this.ptrs.has(e.pointerId)) {
         const o = this.pick(p);
+        const over = o && o.kind === 'star' ? o.node : null;
         sky.style.cursor = o ? 'pointer' : '';
-        this.hover = o && o.kind === 'star' ? o.node : null;
+        // with reduced motion the loop rests, so a change of ring needs a frame
+        if (over !== this.hover) this.kick();
+        this.hover = over;
         this.events.onHover?.(o, p, this.W, this.H);
         return;
       }
@@ -502,6 +505,7 @@ export class Engine {
     sky.addEventListener('pointerup', up);
     sky.addEventListener('pointercancel', up);
     sky.addEventListener('pointerleave', () => {
+      if (this.hover) this.kick();
       this.hover = null;
       this.events.onHover?.(null, { x: 0, y: 0 }, this.W, this.H);
     });

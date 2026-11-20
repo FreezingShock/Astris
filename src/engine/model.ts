@@ -66,7 +66,8 @@ export interface Con {
   dim: number;
   dimT: number;
   pulses: Pulse[];
-  ghost: { t0: number } | null;
+  /** Set when the constellation becomes a memory: when, and the star the reader left through, if any. */
+  ghost: { t0: number; via: StarNode | null } | null;
   gm: MemoryMove | null;
   gone: boolean;
   /** Screen position of the centre and number of stars drawn, set by the renderer. */
