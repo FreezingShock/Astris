@@ -8,7 +8,7 @@ import { dailyPair, recent, saveDaily, shareText, streak } from './daily';
 import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
 import { UNREACHABLE_NOTE, failureOf } from './failure';
 import { legendHtml, panelHtml, suggestNext } from './panel';
-import { PICKING_HTML, beginRace, hudHtml, par, randomPair, stepRace, type Pair, type Race } from './race';
+import { PICKING_HTML, beginRace, hudHtml, solvePar, randomPair, stepRace, type Pair, type Race } from './race';
 
 export type Mode = 'explore' | 'race' | 'daily' | 'connect' | 'drift';
 
@@ -193,10 +193,13 @@ export class Play {
       },
       () => undefined,
     );
-    if (knownPar !== undefined) return;
-    const found = await par(this.provider, race.start, target);
+    const found = await solvePar(this.provider, race.start, target);
     if (this.race !== race) return;
-    race.par = found;
+    if (found.par >= 0 || knownPar === undefined) {
+      race.par = found.par;
+      race.parExact = found.exact;
+    }
+    if (found.route) race.route = found.route;
     this.hud();
   }
 
