@@ -252,7 +252,7 @@ describe('the daily race', () => {
     expect(saveDaily(day, { clicks: 6, time: 1000 }, store)).toEqual({ clicks: 5, time: 9000 });
     expect(saveDaily(day, { clicks: 5, time: 4000 }, store)).toEqual({ clicks: 5, time: 4000 });
     expect(bestDaily(day + 1, store)).toBeNull();
-    data.set('astris:daily:' + day, '{broken');
+    data.set('astris:stats:v1', '{broken');
     expect(bestDaily(day, store)).toBeNull();
     const blocked = {
       getItem: (): string | null => null,
