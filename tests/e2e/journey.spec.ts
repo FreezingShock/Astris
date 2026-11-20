@@ -92,21 +92,3 @@ test('a plain visit offers to resume, and starting a race leaves the journey alo
   await expect(page.locator('#hud')).toBeVisible();
   await expect(page).not.toHaveURL(/[?&]j=/);
 });
-
-test('a refresh brings back where the view was panned and zoomed', async ({ page }) => {
-  await wander(page);
-  await page.waitForTimeout(3000);
-  const box = (await page.locator('#sky').boundingBox())!;
-  await page.mouse.move(box.x + 200, box.y + 300);
-  await page.mouse.down();
-  await page.mouse.move(box.x + 120, box.y + 260, { steps: 6 });
-  await page.mouse.up();
-  await page.locator('#zin').click();
-  await page.waitForTimeout(2500);
-  const before = await page.screenshot({ clip: { x: box.x, y: box.y, width: 400, height: 300 } });
-  await page.reload();
-  await expect.poll(() => centres(page), { timeout: 10_000 }).toBe('3 centres');
-  await page.waitForTimeout(3000);
-  const after = await page.screenshot({ clip: { x: box.x, y: box.y, width: 400, height: 300 } });
-  expect(after.equals(before) || Math.abs(after.length - before.length) / before.length < 0.08).toBe(true);
-});

@@ -218,24 +218,3 @@ describe('journey', () => {
     expect(new JourneyStore(mem).load(j.id ?? '')?.path).toEqual([a.center.title, b.center.title]);
   });
 });
-
-describe('saved view', () => {
-  it('is kept with a saved journey, dropped on the next step, and refused when it is not a view', async () => {
-    const mem = memory();
-    const store = new JourneyStore(mem);
-    const j = new Journey(store);
-    const a = await provider.constellation('Architecture');
-    const b = await provider.constellation(a.stars[0]?.title ?? '');
-    j.begin(a);
-    j.setView(1, 2, 3); // not saved yet, so nothing is written
-    expect(mem.data.size).toBe(0);
-    j.step(b);
-    j.setView(120.456, -30, 0.81234);
-    expect(store.load(j.id ?? '')?.view).toEqual([120.46, -30, 0.8123]);
-    j.step(a);
-    expect(store.load(j.id ?? '')?.view).toBeUndefined();
-    expect(migrate({ v: 1, id: 'abcdef1', path: ['A'], view: [1, 2, 0] })?.view).toBeUndefined();
-    expect(migrate({ v: 1, id: 'abcdef1', path: ['A'], view: [1, NaN, 1] })?.view).toBeUndefined();
-    expect(migrate({ v: 1, id: 'abcdef1', path: ['A'], view: [1, 2, 3] })?.view).toEqual([1, 2, 3]);
-  });
-});

@@ -29,6 +29,40 @@ export const CONFIG = {
   /** How far a thread bows sideways, as a share of its length. */
   threadBend: 0.14,
 
+  /** New stars fly out from their parent along their thread over this long, and land at `born`. */
+  flyMs: 420,
+  /** Making room: stars about to be cleared sink to this brightness over roomMs; then they dissolve over clearMs. */
+  roomMs: 700,
+  roomAlpha: 0.45,
+  clearMs: 650,
+  clearDelayMs: 220,
+  clearDrift: 46,
+  /** Particles. */
+  maxParticles: 260,
+  trailCount: 22,
+  trailSpanMs: 520,
+  trailLifeMs: 900,
+  trailSize: 9,
+  burstCount: 30,
+  burstSpeed: 0.2,
+  burstLifeMs: 900,
+  burstSize: 8,
+  dustCount: 70,
+  dustLifeMs: 1000,
+  dustSize: 6,
+  /** The chosen star while it loads: a halo that grows and breathes, and sparks circling it. */
+  haloSize: 62,
+  haloBreathe: 0.004,
+  orbitCount: 5,
+  orbitRadius: 30,
+  orbitSpeed: 0.0042,
+  orbitSize: 7,
+  /** On arrival the centre star swells by this much and settles back over centreBoostMs. */
+  centreBoost: 0.55,
+  centreBoostMs: 520,
+  /** The camera leans in by this factor while a star loads, then settles to the fitted zoom. */
+  pushIn: 1.07,
+
   /** Bloom: the ring of light and the stars that appear behind it. */
   bloomRingMs: 1150,
   bloomSpreadMs: 1050,

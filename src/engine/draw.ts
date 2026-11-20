@@ -22,6 +22,20 @@ export function zoomSize(scale: number): number {
   return Math.max(CONFIG.zoomSizeMin, Math.min(CONFIG.zoomSizeMax, Math.sqrt(scale)));
 }
 
+/** How far along its thread a star has flown, 0 to 1, easing out: it leaves its parent and lands at `born`. */
+export function flight(born: number, now: number, reduce: boolean): number {
+  return reduce ? 1 : ease((now - (born - CONFIG.flyMs)) / CONFIG.flyMs);
+}
+
+/** The thread's curve grown to p of its length: its control point and its tip, where the star rides. */
+function bez(ax: number, ay: number, bx: number, by: number, bend: number, p: number): { qx: number; qy: number; ex: number; ey: number } {
+  const mx = (ax + bx) / 2 - (by - ay) * bend;
+  const my = (ay + by) / 2 + (bx - ax) * bend;
+  const qx = ax + (mx - ax) * p;
+  const qy = ay + (my - ay) * p;
+  return { qx, qy, ex: qx + (mx + (bx - mx) * p - qx) * p, ey: qy + (my + (by - my) * p - qy) * p };
+}
+
 /** Stroke the threads of a constellation, batched by subject and rank. `fade` is set while it dissolves into a memory. */
 function strokeThreads(
   ctx: CanvasRenderingContext2D,
@@ -43,21 +57,16 @@ function strokeThreads(
     ctx.strokeStyle = 'rgba(' + subjectRgb(G.subject) + ',' + ta + ')';
     ctx.beginPath();
     for (const o of G.nodes) {
-      const p = reduce ? 1 : ease((now - (o.born - CONFIG.threadDrawMs)) / CONFIG.threadDrawMs);
-      if (p <= 0 || (via && (o === via || o.par === via)) || (o.dup && o.rank > CONFIG.dupThreadMaxRank)) continue;
+      const p = flight(o.born, now, reduce);
+      if (p <= 0 || o.out?.hard || (via && (o === via || o.par === via)) || (o.dup && o.rank > CONFIG.dupThreadMaxRank)) continue;
       const ax = o.par ? cx + o.par.dx * S : cx;
       const ay = o.par ? cy + o.par.dy * S : cy;
       const bx = cx + o.dx * S;
       const by = cy + o.dy * S;
       if ((ax < 0 && bx < 0) || (ax > w && bx > w) || (ay < 0 && by < 0) || (ay > h && by > h)) continue;
-      const mx = (ax + bx) / 2 - (by - ay) * o.bend;
-      const my = (ay + by) / 2 + (bx - ax) * o.bend;
-      const qx = ax + (mx - ax) * p;
-      const qy = ay + (my - ay) * p;
-      const ex = qx + (mx + (bx - mx) * p - qx) * p;
-      const ey = qy + (my + (by - my) * p - qy) * p;
+      const t = bez(ax, ay, bx, by, o.bend, p);
       ctx.moveTo(ax, ay);
-      ctx.quadraticCurveTo(qx, qy, ex, ey);
+      ctx.quadraticCurveTo(t.qx, t.qy, t.ex, t.ey);
     }
     ctx.stroke();
   }
@@ -120,10 +129,34 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
   let shown = 0;
   const m = CONFIG.cullMargin;
   for (const o of con.nodes) {
-    let s = reduce ? 1 : spring((now - o.born) / CONFIG.starPopMs);
-    let al = con.dim;
+    const fp = flight(o.born, now, reduce);
+    let s = fp <= 0 ? 0 : fp < 1 ? 0.3 + 0.7 * fp : 1;
+    let al = con.dim * (fp < 1 ? Math.min(1, fp * 1.6) : 1);
     let sx = cx + o.dx * S;
     let sy = cy + o.dy * S;
+    if (fp < 1) {
+      // a new star rides the tip of its growing thread out from its parent
+      const ax = o.par ? o.par.dx : 0;
+      const ay = o.par ? o.par.dy : 0;
+      const t = bez(ax, ay, o.dx, o.dy, o.bend, fp);
+      sx = cx + t.ex * S;
+      sy = cy + t.ey * S;
+    }
+    if (o.out) {
+      // being cleared: it sinks, then drifts away from the new centre and fades; a soft mark only dims it
+      const q = o.out;
+      const e = reduce ? 1 : ease((now - q.t0) / (q.hard ? CONFIG.clearMs : CONFIG.roomMs));
+      const k = q.hard ? q.k0 + (1 - q.k0) * e : (1 - CONFIG.roomAlpha) * e;
+      al *= 1 - k;
+      sx += q.ux * k * CONFIG.clearDrift * z;
+      sy += q.uy * k * CONFIG.clearDrift * z;
+      s *= 1 - k * 0.4;
+      if (al <= CONFIG.dissolveCutoff) {
+        o.a = 0;
+        o.on = false;
+        continue;
+      }
+    }
     if (g && (o.rank > CONFIG.memoryKeepRank || o === via)) {
       // dissolving: far stars blow outward and fade, the closest few stay as a faint memory
       const du = reduce ? 1 : ease((now - (g.t0 + o.gd)) / CONFIG.dissolveMs);
@@ -192,13 +225,30 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
   }
 
   // centre star, tinted by its subject
-  const cs = reduce ? 1 : spring((now - con.born) / CONFIG.centrePopMs);
+  const swell = con.arrivedAt !== undefined && !reduce ? 1 + CONFIG.centreBoost * Math.exp(-(now - con.arrivedAt) / (CONFIG.centreBoostMs / 3)) : 1;
+  const cs = reduce || con.arrivedAt !== undefined ? 1 : spring((now - con.born) / CONFIG.centrePopMs);
   const cd =
     (opt.mini ? CONFIG.centreSizeMini : CONFIG.centreSize) *
     (opt.centreScale ?? 1) *
     zs *
+    swell *
     (CONFIG.centreGrowFrom + (1 - CONFIG.centreGrowFrom) * cs) *
     (reduce ? 1 : 1 + Math.sin(now * CONFIG.centreBreatheSpeed) * CONFIG.centreBreatheAmount);
+  if (con.pending && !reduce) {
+    // waiting for its stars: a halo that grows and breathes, and sparks circling the star
+    const wait = now - con.born;
+    const grow = ease(wait / 900);
+    const hd = CONFIG.haloSize * zs * (0.35 + 0.65 * grow) * (1 + Math.sin(wait * CONFIG.haloBreathe) * 0.08);
+    ctx.globalAlpha = 0.55 * Math.min(1, wait / 250);
+    ctx.drawImage(sp.glow(con.subject), cx - hd, cy - hd, hd * 2, hd * 2);
+    const od = CONFIG.orbitSize * zs;
+    for (let i = 0; i < CONFIG.orbitCount; i++) {
+      const a = wait * CONFIG.orbitSpeed + (i / CONFIG.orbitCount) * TAU;
+      const rr = CONFIG.orbitRadius * zs * (0.8 + 0.5 * grow) * (1 + 0.12 * Math.sin(wait * 0.003 + i));
+      ctx.globalAlpha = 0.85 * Math.min(1, wait / 300);
+      ctx.drawImage(sp.white, cx + Math.cos(a) * rr - od, cy + Math.sin(a) * rr - od, od * 2, od * 2);
+    }
+  }
   ctx.globalAlpha = Math.min(1, con.dim + (g ? CONFIG.memoryCentreBoost : 0));
   ctx.drawImage(sp.star(con.subject), cx - cd, cy - cd, cd * 2, cd * 2);
   ctx.globalAlpha = 1;

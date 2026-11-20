@@ -25,8 +25,6 @@ export interface JourneyRecord {
   path: string[];
   /** The constellation of each centre, by title. May be empty; the path alone is enough to rebuild. */
   cons: Record<string, PackedCon>;
-  /** Where the view was last left: [x, y, zoom] in world units. Optional; without it the view is fitted on the last centre. */
-  view?: [number, number, number];
 }
 
 /**
@@ -52,13 +50,9 @@ export function migrate(raw: unknown): JourneyRecord | null {
       if (unpack(packed)) cons[title] = packed as PackedCon;
     }
   }
-  const view =
-    Array.isArray(r.view) && r.view.length === 3 && r.view.every((n) => typeof n === 'number' && Number.isFinite(n)) && (r.view[2] as number) > 0
-      ? (r.view as [number, number, number])
-      : undefined;
   const created = typeof r.created === 'number' ? r.created : 0;
   const updated = typeof r.updated === 'number' ? r.updated : created;
-  return { v: FORMAT, id: r.id, created, updated, path, cons, ...(view ? { view } : {}) };
+  return { v: FORMAT, id: r.id, created, updated, path, cons };
 }
 
 /** Every journey saved in this browser, behind keys that cannot clash with anything else. All failures are swallowed: saving is a convenience. */

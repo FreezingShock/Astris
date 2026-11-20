@@ -63,7 +63,6 @@ export class Journey {
   step(data: Constellation): void {
     if (!this.rec) return this.begin(data);
     const rec = this.rec;
-    delete rec.view;
     rec.path.push(data.center.title);
     rec.cons[data.center.title] = pack(data);
     while (rec.path.length > MAX_STEPS) {
@@ -72,22 +71,6 @@ export class Journey {
     }
     this.saved = this.store.save(rec);
     if (this.saved && rec.path.length === 2) this.store.sweep(rec.id);
-  }
-
-  /** The view saved with this journey, if any. */
-  get view(): [number, number, number] | undefined {
-    return this.rec?.view;
-  }
-
-  /** Remember where the view is. Saves only a journey that is already saved, and only when the view moved. */
-  setView(x: number, y: number, z: number): void {
-    const rec = this.rec;
-    if (!rec || !this.saved) return;
-    const r = (n: number): number => Math.round(n * 100) / 100;
-    const v: [number, number, number] = [r(x), r(y), Math.round(z * 10000) / 10000];
-    if (rec.view && rec.view[0] === v[0] && rec.view[1] === v[1] && rec.view[2] === v[2]) return;
-    rec.view = v;
-    this.saved = this.store.save(rec);
   }
 
   /** Stop recording, for example when a race starts. What was saved stays saved. */
