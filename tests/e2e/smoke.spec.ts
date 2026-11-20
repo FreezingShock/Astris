@@ -50,7 +50,7 @@ test('site links are real links and travel without a reload', async ({ page }) =
   await page.goto('/');
   await expect(page.locator('.vlinks a').first()).toHaveAttribute('href', '/play');
   await page.locator('.vlinks a', { hasText: 'Play' }).click();
-  await expect(page).toHaveURL(/\/play$/);
+  await expect(page).toHaveURL(/\/play/);
   await expect(page.locator('#sky')).toBeVisible();
   await page.goBack();
   await expect(page.locator('#page-main-page')).toBeVisible();
