@@ -149,7 +149,7 @@ export function hudHtml(race: Race): string {
       (race.hint ? "<div class='hint'>" + esc(race.hint) + '</div>' : '') +
       "<div class='stats'><span id='rc'>" +
       race.clicks +
-      " clicks</span><span id='rt'>00:00</span><span id='rp'>" +
+      " clicks</span><span id='rt' aria-hidden='true'>00:00</span><span id='rp'>" +
       parText(race) +
       '</span>' +
       (daily ? button('retry', 'Restart') : button('again', 'New race')) +

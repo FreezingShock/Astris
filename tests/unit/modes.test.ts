@@ -452,3 +452,12 @@ describe('the race card hint', () => {
     expect(hudHtml(race)).toContain("<div class='hint'>A river in &lt;Spain&gt;.</div>");
   });
 });
+
+describe('failureOf', () => {
+  it('treats bad replies as unreachable, not as a missing article', async () => {
+    const { failureOf } = await import('../../src/modes/failure');
+    for (const name of ['ApiError', 'SyntaxError', 'HttpError']) expect(failureOf(Object.assign(new Error('x'), { name }))).toBe('unreachable');
+    expect(failureOf(Object.assign(new Error('x'), { name: 'ArticleNotFoundError' }))).toBe('missing');
+    expect(failureOf(Object.assign(new Error('x'), { name: 'AbortError' }))).toBe('cancelled');
+  });
+});

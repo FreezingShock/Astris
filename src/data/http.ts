@@ -25,6 +25,17 @@ export class HttpError extends Error {
   }
 }
 
+/** A 200 reply whose body is an API error such as a database hiccup. It is never cached. */
+export class ApiError extends Error {
+  constructor(
+    readonly code: string,
+    url: string,
+  ) {
+    super('The API answered with an error (' + code + '): ' + url);
+    this.name = 'ApiError';
+  }
+}
+
 /** The part of Storage the cache needs, so tests can pass a fake. */
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'key' | 'length'>;
 
@@ -128,7 +139,12 @@ export class Http {
       const pause = this.pausedUntil - this.now();
       if (pause > 0) await this.wait(pause, signal);
       const res = await this.fetcher(url, signal ? { signal } : undefined);
-      if (res.ok) return (await res.json()) as unknown;
+      if (res.ok) {
+        const body = (await res.json()) as unknown;
+        const err = typeof body === 'object' && body !== null ? (body as { error?: { code?: unknown } }).error : undefined;
+        if (err) throw new ApiError(typeof err.code === 'string' ? err.code : 'unknown', url);
+        return body;
+      }
       if ((res.status !== 429 && res.status !== 503) || attempt >= MAX_RETRIES) throw new HttpError(res.status, url);
       // Back off for everyone, not only this request, and wait longer each time it repeats.
       const waitMs = Math.min(MAX_BACKOFF_MS, retryAfterMs(res.headers.get('Retry-After'), this.now()) * 2 ** attempt);

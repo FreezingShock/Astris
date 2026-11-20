@@ -52,6 +52,10 @@ export class Play {
   private driftSeen: string[] = [];
   private toastTimer = 0;
   private found: Suggestion[] = [];
+  /** The text `found` was fetched for. Suggestions for older text are stale and must not answer Enter. */
+  private foundFor = '';
+  /** The suggestion request now running, so Enter can wait for it instead of taking a stale list. */
+  private settle: Promise<void> = Promise.resolve();
   private sel = 0;
   private suggestSeq = 0;
   private summary: ArticleSummary | null = null;
@@ -82,8 +86,10 @@ export class Play {
         $('gstat').textContent =
           stats.stars + ' stars · ' + stats.memories + (stats.memories === 1 ? ' memory' : ' memories') + ' · ' + this.discovery.label + ' · ' + this.copy.status;
         if (this.race && !this.race.done) {
+          // The clock sits in a live region, so it is hidden from screen readers and written only when the second changes.
           const t = document.getElementById('rt');
-          if (t) t.textContent = clock(now - this.race.t0);
+          const text = clock(now - this.race.t0);
+          if (t && t.textContent !== text) t.textContent = text;
         }
       },
     });
@@ -153,10 +159,15 @@ export class Play {
     const cur = this.engine.current;
     let t: string;
     let n = 0;
-    do {
-      t = await this.provider.random();
-      n++;
-    } while (cur && t === cur.title && n < 20);
+    try {
+      do {
+        t = await this.provider.random();
+        n++;
+      } while (cur && t === cur.title && n < 20);
+    } catch (err) {
+      if (failureOf(err) !== 'cancelled') this.toast(UNREACHABLE_NOTE);
+      return;
+    }
     if (this.mode !== 'explore') this.setMode('explore');
     if (cur) {
       this.clearSearch();
@@ -273,11 +284,16 @@ export class Play {
     const step = async (): Promise<void> => {
       const cur = this.engine.current?.title;
       if (cur) {
-        this.driftSeen = [...this.driftSeen.slice(-8), cur];
-        const next = nextStop(await this.provider.neighbours(cur).catch(() => []), this.driftSeen);
-        if (this.mode !== 'drift') return;
-        if (next) await this.navigate(next);
-        else await this.navigate(await this.provider.random());
+        try {
+          this.driftSeen = [...this.driftSeen.slice(-8), cur];
+          const next = nextStop(await this.provider.neighbours(cur).catch(() => []), this.driftSeen);
+          if (this.mode !== 'drift') return;
+          // A dead end or a failed lookup is not the end of the drift: it hops to a random article, or waits and tries again.
+          if (next) await this.navigate(next);
+          else await this.navigate(await this.provider.random());
+        } catch {
+          // Wikipedia hiccuped; the next tick tries again.
+        }
       }
       if (this.mode === 'drift') this.driftTimer = window.setTimeout(() => void step(), DRIFT_MS);
     };
@@ -420,6 +436,7 @@ export class Play {
   private clearSearch(): void {
     this.gq.value = '';
     this.found = [];
+    this.foundFor = '';
     this.gs.classList.remove('open');
     this.gq.blur();
   }
@@ -436,6 +453,7 @@ export class Play {
       // An empty box offers the best next stars, so a new direction is one click away.
       const cur = this.engine.current;
       this.found = cur ? suggestNext(cur.nodes, this.engine.visited) : [];
+      this.foundFor = '';
       this.gs.classList.toggle('open', this.found.length > 0);
       this.renderSuggestions('');
       return;
@@ -448,6 +466,7 @@ export class Play {
     }
     if (seq !== this.suggestSeq) return;
     this.found = found;
+    this.foundFor = q;
     this.gs.classList.add('open');
     this.renderSuggestions(q);
   }
@@ -475,9 +494,11 @@ export class Play {
     const { gq, gs, engine } = this;
     gq.addEventListener('input', () => {
       this.sel = 0;
-      void this.suggest();
+      this.settle = this.suggest();
     });
-    gq.addEventListener('focus', () => void this.suggest());
+    gq.addEventListener('focus', () => {
+      this.settle = this.suggest();
+    });
     gq.addEventListener('blur', () => {
       setTimeout(() => gs.classList.remove('open'), 150);
     });
@@ -486,11 +507,17 @@ export class Play {
         gq.blur();
         return;
       }
-      if (!this.found.length) {
-        // Enter on text with no suggestion yet still tries the article: the provider follows redirects.
-        if (e.key === 'Enter' && gq.value.trim()) this.choose(gq.value.trim());
+      const typed = gq.value.trim();
+      if (e.key === 'Enter' && typed && this.foundFor !== typed) {
+        // The list on screen belongs to older text. Wait for the suggestions for what was typed, then take the best one.
+        e.preventDefault();
+        void this.settle.then(() => {
+          const hit = this.foundFor === typed ? this.found[this.sel] : undefined;
+          if (gq.value.trim() === typed) this.choose(hit?.title ?? typed);
+        });
         return;
       }
+      if (!this.found.length) return;
       if (e.key === 'ArrowDown') this.sel = (this.sel + 1) % this.found.length;
       else if (e.key === 'ArrowUp') this.sel = (this.sel + this.found.length - 1) % this.found.length;
       else if (e.key === 'Enter') {

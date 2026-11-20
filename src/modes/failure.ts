@@ -8,7 +8,8 @@ export type Failure = 'missing' | 'unreachable' | 'cancelled';
 export function failureOf(err: unknown): Failure {
   const name = err instanceof Error ? err.name : '';
   if (name === 'AbortError') return 'cancelled';
-  if (name === 'HttpError' || name === 'TypeError' || name === 'TimeoutError') return 'unreachable';
+  // SyntaxError is a reply that was not JSON, such as a captive portal page; ApiError is a 200 that carries an error body.
+  if (name === 'HttpError' || name === 'ApiError' || name === 'SyntaxError' || name === 'TypeError' || name === 'TimeoutError') return 'unreachable';
   return 'missing';
 }
 
