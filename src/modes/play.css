@@ -97,46 +97,130 @@
 }
 .gsugg {
   list-style: none;
-  margin: 6px 0 0;
-  padding: 4px;
+  margin: 8px 0 0;
+  padding: 5px;
   position: absolute;
   left: 0;
   right: 0;
   top: 100%;
-  background: rgb(14, 16, 24);
+  background: rgba(14, 16, 24, 0.94);
+  backdrop-filter: blur(14px);
   border: 1px solid var(--night-line);
-  border-radius: 14px;
+  border-radius: 16px;
   box-shadow: var(--night-shadow);
-  overflow: hidden;
-  display: none;
+  max-height: min(62vh, 440px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  /* closed: invisible and untouchable, but still painted so it can fade out */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-6px) scale(0.985);
+  transform-origin: top center;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-base) var(--ease-out),
+    visibility 0s linear var(--dur-base);
 }
 .gsugg.open {
-  display: block;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition-delay: 0s;
 }
 .gsugg li {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 7px 12px;
+  position: relative;
+  display: block;
+  min-width: 0;
+  padding: 8px 14px 8px 16px;
   cursor: pointer;
-  border-radius: 10px;
-  font-family: var(--serif);
-  font-size: 16px;
-  color: var(--link);
+  border-radius: 11px;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.gsugg li::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--link), rgb(var(--subject-astronomy)));
+  opacity: 0;
+  transform: scaleY(0.4);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-base) var(--ease-spring);
+}
+.gsugg li:hover {
+  background: rgba(255, 255, 255, 0.05);
 }
 .gsugg li.on {
-  background: rgba(110, 163, 255, 0.16);
+  background: rgba(110, 163, 255, 0.14);
 }
-.gsugg li span {
+.gsugg li.on::before {
+  opacity: 1;
+  transform: none;
+}
+.gsugg .t,
+.gsugg .d {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gsugg .t {
+  font-family: var(--serif);
+  font-size: 16px;
+  line-height: 1.3;
+  color: var(--starlight);
+}
+.gsugg .d {
+  margin-top: 1px;
   font-family: var(--sans);
   font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
-  align-self: center;
+  line-height: 1.35;
+  color: var(--dust);
 }
 .gsugg mark {
-  background: rgba(240, 138, 169, 0.3);
-  color: inherit;
+  background: none;
+  color: var(--link);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: rgba(122, 169, 255, 0.45);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.gsugg li.none {
+  cursor: default;
+  color: var(--space-redlink);
+}
+.gsugg li.none:hover {
+  background: none;
+}
+.gsugg li.none::before {
+  display: none;
+}
+.gsugg li.none .d {
+  color: var(--dust);
+}
+.gsugg.fresh li {
+  animation: m-rise var(--dur-base) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 32ms);
+}
+@media (max-width: 640px) {
+  .gsugg {
+    max-height: 56vh;
+  }
+  .gsugg li {
+    padding: 10px 14px 10px 16px;
+    min-height: 48px;
+  }
+  .gsugg .t {
+    font-size: 17px;
+  }
 }
 .modes {
   display: flex;
@@ -423,6 +507,23 @@
 #hud .chain .at .lk {
   color: var(--neb-rose);
   text-shadow: 0 0 14px rgba(240, 138, 169, 0.7);
+}
+#hud .score {
+  font-size: 13.5px;
+  margin: 3px 0 2px;
+  color: var(--muted);
+}
+#hud .score b {
+  color: var(--ink);
+}
+#hud .score .stars {
+  color: var(--neb-rose);
+  letter-spacing: 2px;
+  font-size: 16px;
+}
+#hud .score .pb {
+  color: var(--neb-rose);
+  font-weight: 600;
 }
 #hud .streak {
   display: flex;

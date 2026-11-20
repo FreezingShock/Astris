@@ -3,9 +3,10 @@ import { esc } from '../lib';
 import { replay, subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
 import { Atlas, Collection } from '../sky';
-import { Discovery, Share, Tip, firstLine, initKeyboard } from '../comforts';
+import { Celebration, Discovery, Share, Sound, Tip, Tour, firstLine, initKeyboard, tierOf } from '../comforts';
 import { Connect, connectHtml, type ConnectState } from './connect';
-import { dailyPair, recent, saveDaily, shareText, streak } from './daily';
+import { dailyPair, dayOf, recent, saveDaily, shareText, streak } from './daily';
+import { recordRun } from './stats';
 import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
 import { diagnose } from '../data';
 import { OutageScreen } from './outage';
@@ -27,6 +28,8 @@ export interface SourceCopy {
 }
 
 const DEFAULT_ARTICLE = 'Architecture';
+/** How long the pointer rests on a star before its article is fetched ahead of a click. */
+const WARM_DWELL_MS = 350;
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -53,7 +56,12 @@ export class Play {
   private atlas: Atlas | null = null;
   private readonly tip: Tip;
   private readonly share: Share;
+  private readonly sound = new Sound();
+  private readonly fx: Celebration;
+  private readonly tour: Tour;
   private seq = 0;
+  private warmTimer = 0;
+  private readonly warmed = new Set<string>();
   private driftTimer = 0;
   private driftSeen: string[] = [];
   private toastTimer = 0;
@@ -82,12 +90,23 @@ export class Play {
         this.stopDrift();
         void this.navigate(title);
       },
-      onHover: (target, p, w, h) => this.tip.show(target, p, w, h),
+      onHover: (target, p, w, h) => {
+        this.tip.show(target, p, w, h);
+        this.warm(target && target.kind === 'star' ? target.node.title : null);
+      },
       onChange: (cur) => this.changed(cur),
       onTravel: (title, now) => this.travelled(title, now),
       onFrame: (stats, now) => {
         $('gstat').textContent =
-          stats.stars + ' stars · ' + stats.memories + (stats.memories === 1 ? ' memory' : ' memories') + ' · ' + this.discovery.label + ' · ' + this.copy.status;
+          stats.stars +
+          ' stars · ' +
+          (stats.memories + 1) +
+          (stats.memories + 1 === 1 ? ' centre' : ' centres') +
+          ' · ' +
+          this.discovery.label +
+          ' · ' +
+          this.copy.status +
+          this.perf();
         if (this.race && !this.race.done) {
           const t = document.getElementById('rt');
           if (t) t.textContent = clockText(this.race, now);
@@ -108,6 +127,8 @@ export class Play {
       onMap: this.isOpen,
       toast: (message) => this.toast(message),
     });
+    this.fx = new Celebration($('play'));
+    this.tour = new Tour({ host: $('play'), canvas: $('sky'), search: this.gq, onRace: () => void this.newRace() });
     this.connect = new Connect({
       provider: this.provider,
       current: () => this.engine.current?.title ?? null,
@@ -135,6 +156,8 @@ export class Play {
     this.engine.enable();
     this.share.sync();
     if (!this.engine.current) void this.open(DEFAULT_ARTICLE, false);
+    // The tutorial greets a first visit to the plain map, never a shared link.
+    if (!this.tour.seen && !this.tour.open && !location.search) this.tour.start();
   }
 
   /** The map route closed. */
@@ -145,6 +168,7 @@ export class Play {
 
   /** Start over from one article, in Explore unless told otherwise. */
   async open(title: string, explore = true): Promise<void> {
+    this.atlas?.close(false);
     if (explore) this.setMode('explore');
     const data = await this.load(title, (d) => this.reset(d));
     if (data) this.reset(data);
@@ -171,6 +195,7 @@ export class Play {
 
   /** Travel to a random article, leaving a race if one is running. */
   async surprise(): Promise<void> {
+    this.atlas?.close(false);
     const cur = this.engine.current;
     let t: string;
     let n = 0;
@@ -191,6 +216,7 @@ export class Play {
 
   /** Start a race between two articles. Par is searched for in the background unless it is already known. */
   async startRace(start: string, target: string, knownPar?: number, day?: number, hard = false, rules: Rules = day === undefined ? loadRules() : NO_RULES): Promise<void> {
+    this.atlas?.close(false);
     const seq = ++this.raceSeq;
     this.picking = false;
     this.setMode(day === undefined ? 'race' : 'daily');
@@ -230,6 +256,7 @@ export class Play {
 
   /** Open Connect two, optionally with both articles already chosen. */
   async startConnect(from?: string, to?: string): Promise<void> {
+    this.atlas?.close(false);
     this.setMode('connect');
     this.connect.start();
     if (from && to) await this.connect.run(from, to);
@@ -237,6 +264,7 @@ export class Play {
 
   /** Start today's race: one pair a day, the same for every visitor. */
   async startDaily(hard = false): Promise<void> {
+    this.atlas?.close(false);
     const pair = dailyPair(undefined, hard);
     await this.startRace(pair.start, pair.target, undefined, pair.day, hard);
   }
@@ -334,6 +362,7 @@ export class Play {
 
   /** Drift: the map travels to a neighbouring article every few seconds until the reader acts. */
   startDrift(): void {
+    this.atlas?.close(false);
     this.setMode('drift');
     this.hud();
     const step = async (): Promise<void> => {
@@ -356,6 +385,7 @@ export class Play {
   }
 
   setMode(m: Mode): void {
+    this.atlas?.close(false);
     if (m !== 'drift') clearTimeout(this.driftTimer);
     this.mode = m;
     document.querySelectorAll<HTMLElement>('#modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
@@ -386,6 +416,25 @@ export class Play {
   /** Tell the reader an article could not be found. */
   missing(query: string): void {
     this.outage.show('missing', { query, keep: this.engine.current !== null });
+  }
+
+  /**
+   * Resting on a star for a moment fetches its constellation ahead of the click, so that travelling there feels instant.
+   * The provider keeps what it fetched; one star at a time keeps within Wikipedia's rate limits.
+   */
+  private warm(title: string | null): void {
+    clearTimeout(this.warmTimer);
+    if (!title || title === this.engine.current?.title || this.warmed.has(title)) return;
+    this.warmTimer = window.setTimeout(() => {
+      this.warmed.add(title);
+      void this.provider.constellation(title).catch(() => undefined);
+    }, WARM_DWELL_MS);
+  }
+
+  /** With ?perf in the address: how long a frame takes to draw and how much detail is drawn. */
+  private perf(): string {
+    if (!location.search.includes('perf')) return '';
+    return ' · ' + this.engine.frameMs.toFixed(1) + ' ms/frame · detail ' + this.engine.detail;
   }
 
   /**
@@ -476,6 +525,8 @@ export class Play {
   }
 
   private travelled(title: string, now: number): void {
+    this.sound.arrive(title);
+    this.tour.advance('travel');
     const race = this.race;
     if (!race || race.done) return;
     if (stepRace(race, title, now)) {
@@ -486,9 +537,28 @@ export class Play {
         race.streak = streak(race.day);
         race.calendar = recent(race.day);
       }
+      race.result = recordRun({
+        day: dayOf(),
+        mode: race.day === undefined ? 'race' : 'daily',
+        start: race.start,
+        target: race.target,
+        clicks: race.clicks,
+        par: race.par,
+        time: race.time,
+        hints: race.revealed,
+      });
       this.prepare();
+      this.celebrate(race);
     }
     this.hud();
+  }
+
+  /** A burst of stars and a rising chime when a race ends; a better finish makes more of both. */
+  private celebrate(race: Race): void {
+    const tier = tierOf(race.clicks, race.par);
+    this.sound.win(tier);
+    this.hud();
+    this.fx.burst(tier, $('hud'), this.engine.current?.subject ?? 'Other');
   }
 
   private connectCard(state: ConnectState | null): void {
@@ -538,6 +608,7 @@ export class Play {
   }
 
   private choose(title: string): void {
+    this.atlas?.close(false);
     this.clearSearch();
     if (this.engine.current) void this.navigate(title);
   }
@@ -549,8 +620,9 @@ export class Play {
       // An empty box offers the best next stars, so a new direction is one click away.
       const cur = this.engine.current;
       this.found = cur ? suggestNext(cur.nodes, this.engine.visited) : [];
+      const fresh = !this.gs.classList.contains('open');
+      this.renderSuggestions('', fresh);
       this.gs.classList.toggle('open', this.found.length > 0);
-      this.renderSuggestions('');
       return;
     }
     let found: Suggestion[];
@@ -561,14 +633,18 @@ export class Play {
     }
     if (seq !== this.suggestSeq) return;
     this.found = found;
+    const fresh = !this.gs.classList.contains('open');
+    this.renderSuggestions(q, fresh);
     this.gs.classList.add('open');
-    this.renderSuggestions(q);
   }
 
-  private renderSuggestions(q: string): void {
+  /** Draw the list. `fresh` plays the staggered entrance, used only when the list opens, not on every keystroke. */
+  private renderSuggestions(q: string, fresh = false): void {
     const gs = this.gs;
+    gs.classList.toggle('fresh', fresh);
     if (!this.found.length) {
-      gs.innerHTML = "<li style='color:var(--space-redlink);cursor:default'>" + esc(q) + '<span>no such article ' + esc(this.copy.missing) + '</span></li>';
+      gs.innerHTML =
+        "<li class='none' role='option' aria-disabled='true'><span class='t'>" + esc(q) + "</span><span class='d'>no such article " + esc(this.copy.missing) + '</span></li>';
       return;
     }
     if (this.sel >= this.found.length) this.sel = 0;
@@ -577,9 +653,36 @@ export class Play {
         const t = s.title;
         const k = q ? t.toLowerCase().indexOf(q.toLowerCase()) : -1;
         const h = k >= 0 ? esc(t.slice(0, k)) + '<mark>' + esc(t.slice(k, k + q.length)) + '</mark>' + esc(t.slice(k + q.length)) : esc(t);
-        return "<li role='option' data-i='" + i + "' class='" + (i === this.sel ? 'on' : '') + "'>" + h + '<span>' + esc(s.description ?? '') + '</span></li>';
+        const d = s.description ? "<span class='d'>" + esc(s.description) + '</span>' : '';
+        return (
+          "<li role='option' data-i='" +
+          i +
+          "' style='--i:" +
+          Math.min(i, 8) +
+          "' aria-selected='" +
+          (i === this.sel) +
+          "' class='" +
+          (i === this.sel ? 'on' : '') +
+          "'>" +
+          "<span class='t'>" +
+          h +
+          '</span>' +
+          d +
+          '</li>'
+        );
       })
       .join('');
+  }
+
+  /** Move the highlight without rebuilding the list, so arrow keys and hover never replay the entrance. */
+  private select(i: number, scroll = false): void {
+    this.sel = i;
+    this.gs.querySelectorAll<HTMLElement>('li[data-i]').forEach((li) => {
+      const on = Number(li.dataset.i) === i;
+      li.classList.toggle('on', on);
+      li.setAttribute('aria-selected', String(on));
+      if (on && scroll) li.scrollIntoView({ block: 'nearest' });
+    });
   }
 
   /* ---------- wiring ---------- */
@@ -604,17 +707,20 @@ export class Play {
         if (e.key === 'Enter' && gq.value.trim()) this.choose(gq.value.trim());
         return;
       }
-      if (e.key === 'ArrowDown') this.sel = (this.sel + 1) % this.found.length;
-      else if (e.key === 'ArrowUp') this.sel = (this.sel + this.found.length - 1) % this.found.length;
+      if (e.key === 'ArrowDown') this.select((this.sel + 1) % this.found.length, true);
+      else if (e.key === 'ArrowUp') this.select((this.sel + this.found.length - 1) % this.found.length, true);
       else if (e.key === 'Enter') {
         const hit = this.found[this.sel];
         if (hit) this.choose(hit.title);
         return;
       } else return;
       e.preventDefault();
-      this.renderSuggestions(gq.value.trim());
     });
     gs.addEventListener('mousedown', (e) => e.preventDefault());
+    gs.addEventListener('mousemove', (e) => {
+      const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-i]');
+      if (li && Number(li.dataset.i) !== this.sel) this.select(Number(li.dataset.i));
+    });
     gs.addEventListener('click', (e) => {
       const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-i]');
       const hit = li ? this.found[Number(li.dataset.i)] : undefined;
@@ -625,15 +731,43 @@ export class Play {
     document.addEventListener('keydown', (e) => {
       const t = e.target;
       const typing = t instanceof HTMLElement && (t.isContentEditable || t.matches('input, textarea, select, button, a'));
-      if (e.key === 'n' && this.isOpen() && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key === 'n' && this.isOpen() && !this.atlas?.isOpen && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         void this.newChain();
       }
     });
     const atlas = new Atlas({ collection: this.collection, open: (title) => void this.open(title) });
     this.atlas = atlas;
-    $('skyBtn').addEventListener('click', () => (atlas.isOpen ? atlas.close() : atlas.open()));
+    $('skyBtn').addEventListener('click', () => {
+      if (atlas.isOpen) return atlas.close();
+      if (this.tour.open) this.tour.finish();
+      atlas.open();
+    });
+    // The atlas is a sheet over the map: anything outside it, or Escape, puts it away.
+    document.addEventListener('pointerdown', (e) => {
+      const t = e.target;
+      if (atlas.isOpen && t instanceof Element && !t.closest('#atlas, #skyBtn')) atlas.close(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && atlas.isOpen) atlas.close();
+    });
+    this.gq.addEventListener('focus', () => atlas.close(false));
     $('surprise').addEventListener('click', () => void this.surprise());
+    const snd = $('snd');
+    const paintSound = (): void => {
+      snd.setAttribute('aria-pressed', String(this.sound.enabled));
+      snd.title = this.sound.enabled ? 'Sound is on' : 'Sound is off';
+      snd.setAttribute('aria-label', snd.title);
+    };
+    paintSound();
+    snd.addEventListener('click', () => {
+      this.sound.set(!this.sound.enabled);
+      paintSound();
+    });
+    $('tourbtn').addEventListener('click', () => {
+      this.atlas?.close(false);
+      this.tour.start();
+    });
     $('zin').addEventListener('click', () => engine.zoomBy(1.4));
     $('zout').addEventListener('click', () => engine.zoomBy(1 / 1.4));
     $('zfit').addEventListener('click', () => engine.fit());

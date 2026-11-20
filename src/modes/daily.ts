@@ -1,4 +1,5 @@
 import { hash } from '../lib';
+import { dailyBest, saveDailyBest } from './stats';
 
 /**
  * The articles a daily race can start or end at, grouped so the two ends come from different subjects.
@@ -65,8 +66,6 @@ export interface DailyResult {
   par?: number;
 }
 
-const key = (day: number, hard = false): string => 'astris:daily:' + (hard ? 'hard:' : '') + day;
-
 type Store = Pick<Storage, 'getItem' | 'setItem'>;
 
 /** This browser's storage, or nothing where it is blocked. */
@@ -78,29 +77,14 @@ function browserStore(): Store | undefined {
   }
 }
 
-/** The reader's best finish for a day, kept in this browser only. Null when there is none or storage is off. */
+/** The reader's best finish for a day, kept in this browser's stats record. Null when there is none or storage is off. */
 export function bestDaily(day: number, store: Pick<Store, 'getItem'> | undefined = browserStore(), hard = false): DailyResult | null {
-  try {
-    const raw: unknown = JSON.parse(store?.getItem(key(day, hard)) ?? 'null');
-    if (typeof raw !== 'object' || raw === null) return null;
-    const { clicks, time, par } = raw as Record<string, unknown>;
-    if (typeof clicks !== 'number' || typeof time !== 'number') return null;
-    return typeof par === 'number' ? { clicks, time, par } : { clicks, time };
-  } catch {
-    return null;
-  }
+  return dailyBest(day, hard, store);
 }
 
 /** Keep a finish when it beats the stored one: fewer clicks, or the same clicks in less time. Returns the best. */
 export function saveDaily(day: number, result: DailyResult, store: Store | undefined = browserStore(), hard = false): DailyResult {
-  const old = bestDaily(day, store, hard);
-  if (old && (old.clicks < result.clicks || (old.clicks === result.clicks && old.time <= result.time))) return old;
-  try {
-    store?.setItem(key(day, hard), JSON.stringify(result));
-  } catch {
-    // Storage is full or blocked: the finish still shows, it is just not remembered.
-  }
-  return result;
+  return saveDailyBest(day, result, hard, store);
 }
 
 /** True when the reader finished either version of that day's race. */

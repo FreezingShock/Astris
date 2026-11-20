@@ -23,6 +23,8 @@ export interface StarNode extends Star {
   gd: number;
   gux: number;
   guy: number;
+  /** True when the star was already on the map. It sits where the first one is and only adds a thread. */
+  dup?: boolean;
   /** Cached label widths. */
   wb?: number;
   ws?: number;
@@ -70,6 +72,10 @@ export interface Con {
   ghost: { t0: number; via: StarNode | null } | null;
   gm: MemoryMove | null;
   gone: boolean;
+  /** Largest distance of any star from the centre, in unscaled units. Cleared when stars are dropped. */
+  reach?: number;
+  /** Whether any of it was on screen in the last frame. */
+  vis?: boolean;
   /** Screen position of the centre and number of stars drawn, set by the renderer. */
   cx: number;
   cy: number;
