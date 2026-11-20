@@ -1,13 +1,11 @@
 import type { DataProvider } from '../types';
 import { prefersReducedMotion, subjectDotsHtml, subjectKeyHtml } from '../styles';
 import { MiniMap } from '../engine';
-import { par, type Play } from '../modes';
+import { dailyPair, par, type Play } from '../modes';
 import { articleOf, dispatchPlayLink, isRouteName, pathOf, racePairOf, routeOf, type RouteName } from './router';
 
 /** The article at the centre of the main page's small map. */
 const TODAY = 'Architecture';
-/** Today's race, as shown on the main page. */
-const RACE: [string, string] = ['Brutalist architecture', 'Jazz'];
 /** How many stars the small map shows. */
 const MINI_STARS = 70;
 
@@ -31,7 +29,14 @@ export class Site {
     this.bind();
     $('topicKey').innerHTML = subjectKeyHtml();
     $('topicDots').innerHTML = subjectDotsHtml();
-    void par(provider, RACE[0], RACE[1]).then((d) => {
+    // Today's race is the daily pair: the same two articles for every visitor until midnight UTC.
+    const today = dailyPair();
+    document.querySelectorAll<HTMLElement>('.race a').forEach((a, i) => {
+      const title = i === 0 ? today.start : today.target;
+      a.textContent = title;
+      a.dataset.topic = title;
+    });
+    void par(provider, today.start, today.target).then((d) => {
       if (d >= 0) $('parText').textContent = 'Par for this pair is ' + d + ' clicks.';
     });
     void provider.constellation(TODAY).then((data) => {
@@ -58,7 +63,8 @@ export class Site {
     if (name !== 'play' || dispatchPlayLink(location.search)) return;
     const pair = racePairOf(location.search);
     const article = articleOf(location.search);
-    if (pair) void this.play.startRace(pair.start, pair.target);
+    if (new URLSearchParams(location.search).has('daily')) void this.play.startDaily();
+    else if (pair) void this.play.startRace(pair.start, pair.target);
     else if (article) void this.play.open(article);
   }
 
@@ -127,7 +133,7 @@ export class Site {
       }
       this.go('play');
       const topic = d.topic;
-      if (d.race) setTimeout(() => void this.play.startRace(RACE[0], RACE[1]), 30);
+      if (d.race) setTimeout(() => void this.play.startDaily(), 30);
       else if (d.random) setTimeout(() => void this.play.surprise(), 30);
       else if (topic) setTimeout(() => void this.play.open(topic), 30);
     });

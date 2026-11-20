@@ -51,3 +51,22 @@ test('the daily race starts from its tab, finishes and remembers the best result
   await hud.locator('#quit').click();
   await expect(hud).toBeHidden();
 });
+
+test("the main page's race is the daily pair and starts the daily race", async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-11-20T12:00:00Z'));
+  await page.goto('/');
+  await expect(page.locator('.race a').nth(0)).toHaveText('Silk Road');
+  await expect(page.locator('.race a').nth(1)).toHaveText('Tokyo');
+  await expect(page.locator('#parText')).toHaveText('Par for this pair is 3 clicks.');
+  await page.locator('#page-main-page .box button[data-race]').click();
+  const hud = page.locator('#hud');
+  await expect(hud).toContainText('Daily constellation · 20 Nov');
+  await expect(hud).toContainText('Silk Road → Tokyo');
+  await expect(hud).toContainText('par 3');
+  await expect(page.locator('#modes [data-mode="daily"]')).toHaveAttribute('aria-pressed', 'true');
+
+  // The same links work when opened in a new tab.
+  await page.goto('/play?daily=1');
+  await expect(page.locator('#hud')).toContainText('Silk Road → Tokyo');
+  await expect(page.locator('#hud')).toContainText('Daily constellation');
+});
