@@ -303,7 +303,8 @@ export function hudHtml(race: Race): string {
       (race.note ? "<div class='hint note'>" + esc(race.note) + '</div>' : '') +
       "<div class='stats'><span id='rc'>" +
       race.clicks +
-      " clicks</span><span id='rt' aria-hidden='true'>" +
+      (race.clicks === 1 ? ' click' : ' clicks') +
+      "</span><span id='rt' aria-hidden='true'>" +
       clockText(race, race.t0 + race.time) +
       "</span><span id='rp'>" +
       parText(race) +

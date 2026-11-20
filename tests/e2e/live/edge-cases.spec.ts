@@ -111,3 +111,33 @@ test('Connect two between unlinked islands ends with a clear note', async ({ pag
   await expect(page.locator('#hud')).toContainText(/couldn.t|no chain|not find|unreachable/i, { timeout: 20_000 });
   expect(errors).toEqual([]);
 });
+
+test('a failed move in a race costs no click and leaves the map where it was', async ({ page }) => {
+  const wiki = world();
+  const errors = await open(page, wiki, '/play?race=Hub|Iota');
+  await expect(page.locator('#panel h1')).toHaveText('Hub');
+  await expect(page.locator('#hud #rc')).toHaveText('0 clicks');
+  wiki.mode = 'http500';
+  await page.locator('#gq').fill('Alpha');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#outage')).toBeVisible();
+  await expect(page.locator('#hud #rc')).toHaveText('0 clicks');
+  await expect(page.locator('#panel h1')).toHaveText('Hub');
+  wiki.mode = 'ok';
+  await page.locator('#outage').getByRole('button', { name: 'Try again' }).click();
+  await expect(page.locator('#panel h1')).toHaveText('Alpha');
+  await expect(page.locator('#hud #rc')).toHaveText('1 click');
+  expect(errors).toEqual([]);
+});
+
+test('a saved journey comes back after a reload', async ({ page }) => {
+  const wiki = world();
+  const errors = await open(page, wiki, '/play?a=Hub');
+  await page.locator('#gq').fill('Alpha');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#panel h1')).toHaveText('Alpha');
+  await page.waitForTimeout(600);
+  await page.reload();
+  await expect(page.locator('#panel h1')).toHaveText('Alpha');
+  expect(errors).toEqual([]);
+});
