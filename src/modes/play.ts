@@ -5,11 +5,12 @@ import { Engine, type Con } from '../engine';
 import { Discovery, Share, Tip, initKeyboard } from '../comforts';
 import { Connect, connectHtml, type ConnectState } from './connect';
 import { dailyPair, saveDaily } from './daily';
+import { DRIFT_MS, nextStop } from './drift';
 import { UNREACHABLE_NOTE, failureOf } from './failure';
 import { legendHtml, panelHtml } from './panel';
 import { PICKING_HTML, beginRace, hudHtml, par, randomPair, stepRace, type Race } from './race';
 
-export type Mode = 'explore' | 'race' | 'daily' | 'connect';
+export type Mode = 'explore' | 'race' | 'daily' | 'connect' | 'drift';
 
 /** Wording that depends on where the data comes from. */
 export interface SourceCopy {
@@ -20,10 +21,6 @@ export interface SourceCopy {
   /** The line under the title in the article panel. */
   panelNote: string;
 }
-
-const SOON: Record<string, string> = {
-  drift: 'Drift is planned: the map explores itself, like a screensaver.',
-};
 
 const DEFAULT_ARTICLE = 'Architecture';
 
@@ -49,6 +46,8 @@ export class Play {
   private readonly tip: Tip;
   private readonly share: Share;
   private seq = 0;
+  private driftTimer = 0;
+  private driftSeen: string[] = [];
   private toastTimer = 0;
   private found: Suggestion[] = [];
   private sel = 0;
@@ -68,7 +67,10 @@ export class Play {
       (title, signal) => this.provider.summary(title, signal),
     );
     this.engine = new Engine($<HTMLCanvasElement>('sky'), {
-      onPick: (title) => void this.navigate(title),
+      onPick: (title) => {
+        this.stopDrift();
+        void this.navigate(title);
+      },
       onHover: (target, p, w, h) => this.tip.show(target, p, w, h),
       onChange: (cur) => this.changed(cur),
       onTravel: (title, now) => this.travelled(title, now),
@@ -229,7 +231,31 @@ export class Play {
     await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, race.day);
   }
 
+  /** Drift: the map travels to a neighbouring article every few seconds until the reader acts. */
+  startDrift(): void {
+    this.setMode('drift');
+    this.toast('Drifting. Click a star or choose Explore to take over.');
+    const step = async (): Promise<void> => {
+      const cur = this.engine.current?.title;
+      if (cur) {
+        this.driftSeen = [...this.driftSeen.slice(-8), cur];
+        const next = nextStop(await this.provider.neighbours(cur).catch(() => []), this.driftSeen);
+        if (this.mode !== 'drift') return;
+        if (next) await this.navigate(next);
+        else await this.navigate(await this.provider.random());
+      }
+      if (this.mode === 'drift') this.driftTimer = window.setTimeout(() => void step(), DRIFT_MS);
+    };
+    this.driftTimer = window.setTimeout(() => void step(), 1200);
+  }
+
+  private stopDrift(): void {
+    clearTimeout(this.driftTimer);
+    if (this.mode === 'drift') this.setMode('explore');
+  }
+
   setMode(m: Mode): void {
+    if (m !== 'drift') clearTimeout(this.driftTimer);
     this.mode = m;
     document.querySelectorAll<HTMLElement>('#modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
     if (m !== 'connect' && this.connect.state) {
@@ -442,8 +468,7 @@ export class Play {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-mode]');
       const m = b?.dataset.mode;
       if (!m) return;
-      const soon = SOON[m];
-      if (soon) this.toast(soon);
+      if (m === 'drift') this.startDrift();
       else if (m === 'race') void this.newRace();
       else if (m === 'daily') void this.startDaily();
       else if (m === 'connect') void this.startConnect();

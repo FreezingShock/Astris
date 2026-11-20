@@ -91,3 +91,12 @@ test('Connect two is live on the main page and opens in the map', async ({ page 
   await page.goto('/play?connect=1');
   await expect(page.locator('#modes [data-mode="connect"]')).toHaveAttribute('aria-pressed', 'true');
 });
+
+test('Drift travels on its own until the reader quits', async ({ page }) => {
+  await page.goto('/play?a=Jazz');
+  await page.locator('#modes [data-mode="drift"]').click();
+  await expect(page.locator('#modes [data-mode="drift"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#panel h1')).not.toHaveText('Jazz', { timeout: 15000 });
+  await page.locator('#modes [data-mode="explore"]').click();
+  await expect(page.locator('#modes [data-mode="explore"]')).toHaveAttribute('aria-pressed', 'true');
+});
