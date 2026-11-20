@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SampleProvider } from '../../src/data';
 import { Graph, graphOf, route } from '../../src/modes/graph';
 import { PAR_BUDGET, beginRace, hudHtml, par, randomPair, stepRace } from '../../src/modes/race';
+import { safeUrl, summaryHtml } from '../../src/modes/summary';
 import type { DataProvider } from '../../src/types';
 
 /** A provider over a hand-written link table that counts neighbour requests. Links run one way unless listed both ways. */
@@ -147,5 +148,45 @@ describe('a race', () => {
     expect(hudHtml(beginRace('A', 'Z', null, 0))).toContain('finding par…');
     expect(hudHtml(beginRace('A', 'Z', -1, 0))).toContain('par unknown');
     expect(hudHtml(beginRace('<b>', 'Z', 3, 0))).toContain('&lt;b&gt;');
+  });
+});
+
+describe('the article summary in the panel', () => {
+  const url = 'https://en.wikipedia.org/wiki/Jazz';
+  const full = { title: 'Jazz', extract: 'Jazz is a music genre.', url, thumbnail: 'https://upload.wikimedia.org/jazz.jpg' };
+
+  it('shows the extract, a link to the article and the licence', () => {
+    const html = summaryHtml('Jazz', full);
+    expect(html).toContain('<b>Jazz</b> is a music genre.');
+    expect(html).toContain("<a href='" + url + "' target='_blank' rel='noopener'>Read the full article on Wikipedia</a>");
+    expect(html).toContain('https://creativecommons.org/licenses/by-sa/4.0/');
+    expect(html).toContain('CC BY-SA 4.0');
+  });
+
+  it('links the thumbnail to the article, and leaves it out when there is none', () => {
+    expect(summaryHtml('Jazz', full)).toMatch(/<a href='https:\/\/en\.wikipedia\.org\/wiki\/Jazz'[^>]* class='thumb'[^>]*><img src='https:\/\/upload\.wikimedia\.org\/jazz\.jpg'/);
+    expect(summaryHtml('Jazz', { ...full, thumbnail: undefined })).not.toContain('<img');
+  });
+
+  it('escapes the text and refuses addresses that are not https', () => {
+    const html = summaryHtml('Jazz', { title: 'Jazz', extract: '<img onerror=x>', url: 'javascript:alert(1)', thumbnail: "https://x.org/a.jpg' onload='x" });
+    expect(html).toContain('&lt;img onerror=x&gt;');
+    expect(html).not.toContain('<a ');
+    expect(html).not.toContain('<img');
+    expect(safeUrl('http://en.wikipedia.org/wiki/Jazz')).toBe('');
+    expect(safeUrl(url)).toBe(url);
+  });
+
+  it('keeps an apostrophe in a title inside its attribute', () => {
+    const html = summaryHtml("Hubble's law", { ...full, title: "Hubble's law" });
+    expect(html).toContain('aria-label="Hubble\'s law on Wikipedia"');
+  });
+
+  it('says so while loading and when an article has no summary', () => {
+    expect(summaryHtml('Jazz', null)).toContain('Fetching the article');
+    const empty = summaryHtml('Jazz', { title: 'Jazz', extract: '', url });
+    expect(empty).toContain('no summary');
+    expect(empty).not.toContain('CC BY-SA');
+    expect(summaryHtml('Jazz', { title: 'Jazz', extract: '', url: '' })).not.toContain('<a ');
   });
 });

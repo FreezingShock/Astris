@@ -26,7 +26,9 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
   const cy = h / 2 + (con.y - cam.y) * z;
   const g = con.ghost;
   const zs = zoomSize(S);
-  const gfade = g ? 1 - ease((now - g.t0) / CONFIG.memoryThreadFadeMs) : 1;
+  const gfade = g ? (reduce ? 0 : 1 - ease((now - g.t0) / CONFIG.memoryThreadFadeMs)) : 1;
+  // the star the reader left through becomes the new centre, so it does not stay in the memory
+  const via = g ? g.via : null;
   con.cx = cx;
   con.cy = cy;
   if (con.dim < CONFIG.dimCutoff && gfade <= 0) return 0;
@@ -61,7 +63,7 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
     ctx.beginPath();
     for (const o of G.nodes) {
       const p = reduce ? 1 : ease((now - (o.born - CONFIG.threadDrawMs)) / CONFIG.threadDrawMs);
-      if (p <= 0) continue;
+      if (p <= 0 || (via && (o === via || o.par === via))) continue;
       const ax = o.par ? cx + o.par.dx * S : cx;
       const ay = o.par ? cy + o.par.dy * S : cy;
       const bx = cx + o.dx * S;
@@ -86,7 +88,7 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
     let al = con.dim;
     let sx = cx + o.dx * S;
     let sy = cy + o.dy * S;
-    if (g && o.rank > CONFIG.memoryKeepRank) {
+    if (g && (o.rank > CONFIG.memoryKeepRank || o === via)) {
       // dissolving: far stars blow outward and fade, the closest few stay as a faint memory
       const du = reduce ? 1 : ease((now - (g.t0 + o.gd)) / CONFIG.dissolveMs);
       al = 1 - du;

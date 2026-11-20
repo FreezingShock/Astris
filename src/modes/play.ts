@@ -223,15 +223,13 @@ export class Play {
     $('legend').innerHTML = legendHtml(cur);
     this.summary = null;
     this.panel(true);
-    void this.provider.summary(cur.title).then(
-      (s) => {
-        if (this.engine.current === cur) {
-          this.summary = s;
-          this.panel(false);
-        }
-      },
-      () => undefined,
-    );
+    const show = (s: ArticleSummary): void => {
+      if (this.engine.current !== cur) return;
+      this.summary = s;
+      this.panel(false);
+    };
+    // A summary that cannot be fetched leaves the rest of the panel in place.
+    void this.provider.summary(cur.title).then(show, () => show({ title: cur.title, extract: '', url: '' }));
   }
 
   private panel(scrollTop: boolean): void {
