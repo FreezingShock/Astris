@@ -491,3 +491,20 @@ table.wt th {
   align-items: center;
   flex-wrap: wrap;
 }
+.mini-note {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--dust);
+}
+.mini-note[hidden] {
+  display: none;
+}
+.mini-note a {
+  color: var(--space-link);
+}

@@ -36,13 +36,22 @@ export class Site {
       a.textContent = title;
       a.dataset.topic = title;
     });
-    void par(provider, today.start, today.target).then((d) => {
-      if (d >= 0) $('parText').textContent = 'Par for this pair is ' + d + ' clicks.';
-    });
-    void provider.constellation(TODAY).then((data) => {
-      this.mini = new MiniMap($<HTMLCanvasElement>('mini'), { center: data.center, stars: data.stars.slice(0, MINI_STARS) });
-      this.miniTick();
-    });
+    // The page stays readable when the data source cannot be reached: no par line, and a note in place of the small map.
+    par(provider, today.start, today.target).then(
+      (d) => {
+        if (d >= 0) $('parText').textContent = 'Par for this pair is ' + d + ' clicks.';
+      },
+      () => undefined,
+    );
+    provider.constellation(TODAY).then(
+      (data) => {
+        this.mini = new MiniMap($<HTMLCanvasElement>('mini'), { center: data.center, stars: data.stars.slice(0, MINI_STARS) });
+        this.miniTick();
+      },
+      () => {
+        $('miniNote').hidden = false;
+      },
+    );
   }
 
   /** True while the map is the surface on screen. */
