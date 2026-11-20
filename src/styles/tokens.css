@@ -87,18 +87,19 @@
   --trail-rgb: 192, 168, 247;
   --dust-a-rgb: 200, 190, 255;
   --dust-b-rgb: 220, 230, 255;
-  /* the twelve subject colour families */
+  /* the twelve subject colour families. The four greens (urban planning, sustainable design, biology,
+     geography) were retuned from the mockup so that no two of them sit close together, and philosophy was moved away from astronomy. */
   --subject-architecture: 255, 190, 120;
-  --subject-urban-planning: 176, 226, 110;
+  --subject-urban-planning: 204, 234, 90;
   --subject-civil-engineering: 110, 163, 255;
-  --subject-sustainable-design: 96, 220, 160;
+  --subject-sustainable-design: 88, 220, 108;
   --subject-astronomy: 164, 139, 245;
   --subject-music: 240, 138, 169;
-  --subject-biology: 84, 214, 208;
-  --subject-philosophy: 201, 168, 255;
+  --subject-biology: 36, 204, 190;
+  --subject-philosophy: 238, 194, 255;
   --subject-computer-science: 98, 200, 255;
   --subject-history: 255, 224, 110;
-  --subject-geography: 130, 214, 180;
+  --subject-geography: 176, 236, 208;
   --subject-video-game: 232, 121, 216;
   /* timing used by CSS; canvas timings live in src/engine/config.ts */
   --t-logo-twinkle: 7s;
