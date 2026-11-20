@@ -49,7 +49,7 @@ export function makeCon(data: Constellation, x: number, y: number, now: number, 
         o.dy = Math.sin(a) * r;
         o.ph = (h % 628) / 100;
         o.sp = CONFIG.twinkleRateMin + ((h % 90) / 90) * CONFIG.twinkleRateSpread;
-        o.born = now + delay + CONFIG.bloomLeadMs + (r / CONFIG.rMax) * CONFIG.bloomSpreadMs + (h % CONFIG.bloomJitterMs);
+        o.born = now + delay + CONFIG.bloomLeadMs + CONFIG.flyMs + (r / CONFIG.rMax) * CONFIG.bloomSpreadMs + (h % CONFIG.bloomJitterMs);
         nodes.push(o);
         const key = c + '|' + L;
         let group = groups.get(key);

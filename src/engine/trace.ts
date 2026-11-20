@@ -44,7 +44,7 @@ const RANK_SHARE = [0, 8, 24, 30, 26, 12];
 const FRAME_MS = 1000 / 60;
 const SLOW_FACTOR = 1.5;
 /** Travel is measured from the click until the last star has landed. */
-const TRAVEL_MS = CONFIG.bloomLeadMs + CONFIG.bloomSpreadMs + CONFIG.bloomJitterMs + CONFIG.starPopMs;
+const TRAVEL_MS = CONFIG.bloomLeadMs + CONFIG.flyMs + CONFIG.bloomSpreadMs + CONFIG.bloomJitterMs + CONFIG.starPopMs;
 
 /** A made-up constellation of a given size, the same every time for the same title. */
 export function syntheticConstellation(title: string, stars = 120): Constellation {

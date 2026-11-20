@@ -270,7 +270,9 @@ describe('travelling before the data arrives', () => {
     dom.step(16);
     dom.run(200);
     expect(Math.abs(engine.current!.cx - x0)).toBeGreaterThan(0.5);
-    expect(from.nodes.every((n) => n.a === 1)).toBe(true);
+    // the old map stays; only the stars that will make way start to sink
+    expect(from.nodes.filter((n) => !n.out).every((n) => n.a === 1)).toBe(true);
+    expect(from.nodes.some((n) => n.out && !n.out.hard)).toBe(true);
     events.push('moving');
     engine.travel(data);
     expect(engine.loading).toBeNull();
@@ -310,5 +312,77 @@ describe('travelling before the data arrives', () => {
     expect(engine.loading).toBeNull();
     expect(engine.current).toBe(a);
     expect(engine.memories).toEqual([jazz]);
+  });
+});
+
+describe('the transition', () => {
+  it('lets cleared stars fade and drift out before they leave, instead of vanishing', async () => {
+    const { dom, engine } = await setup();
+    const from = engine.current!;
+    const { star, data } = await reachable(from, (r) => r <= 2);
+    const before = from.nodes.length;
+    engine.travel(data);
+    const dying = from.nodes.filter((n) => n.out?.hard);
+    expect(dying.length).toBeGreaterThan(0);
+    // still in the constellation, still drawn, and fading
+    expect(from.nodes.length).toBe(before);
+    dom.run(250);
+    expect(dying.some((n) => n.a > 0)).toBe(true);
+    dom.run(CONFIG.clearMs + CONFIG.clearDelayMs + 500);
+    expect(from.nodes.some((n) => n.out?.hard)).toBe(false);
+    expect(from.nodes.length).toBeLessThan(before);
+    expect(star.title).toBe(engine.current!.title);
+  });
+
+  it('brings sunk stars back when the travel is undone', async () => {
+    const { dom, engine } = await setup();
+    const from = engine.current!;
+    const { star } = await reachable(from, () => true);
+    engine.begin(star.title);
+    dom.run(400);
+    expect(from.nodes.some((n) => n.out)).toBe(true);
+    engine.abort(star.title);
+    expect(from.nodes.some((n) => n.out)).toBe(false);
+    dom.run(SETTLE_MS);
+    expect(from.nodes.every((n) => n.a === 1)).toBe(true);
+  });
+
+  it('sheds a trail while loading and bursts light on arrival', async () => {
+    const { dom, engine } = await setup();
+    const from = engine.current!;
+    const { star, data } = await reachable(from, (r) => r <= 2);
+    const parts = (): number => (engine as unknown as { particles: { count: number } }).particles.count;
+    engine.begin(star.title);
+    expect(parts()).toBeGreaterThanOrEqual(CONFIG.trailCount);
+    dom.run(CONFIG.trailLifeMs + CONFIG.trailSpanMs + 200);
+    expect(parts()).toBe(0);
+    engine.travel(data);
+    expect(parts()).toBeGreaterThanOrEqual(CONFIG.burstCount / 2);
+    expect(parts()).toBeLessThanOrEqual(CONFIG.maxParticles);
+  });
+
+  it('swells the new centre on arrival instead of regrowing it', async () => {
+    const { dom, engine } = await setup();
+    const from = engine.current!;
+    const { star, data } = await reachable(from, (r) => r <= 2);
+    engine.begin(star.title);
+    dom.run(500);
+    engine.travel(data);
+    expect(engine.current!.arrivedAt).toBe(dom.now());
+  });
+
+  it('makes no particles and removes cleared stars at once with reduced motion', async () => {
+    const dom = fakeDom(1200, 800, true);
+    const engine = new Engine(dom.canvas);
+    engine.enable();
+    engine.reset(await provider.constellation('Architecture'));
+    dom.step();
+    const from = engine.current!;
+    const { data } = await reachable(from, (r) => r <= 2);
+    const before = from.nodes.length;
+    engine.travel(data);
+    expect((engine as unknown as { particles: { count: number } }).particles.count).toBe(0);
+    expect(from.nodes.length).toBeLessThan(before);
+    expect(from.nodes.some((n) => n.out)).toBe(false);
   });
 });
