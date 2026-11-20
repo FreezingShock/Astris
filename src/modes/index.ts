@@ -7,3 +7,5 @@ export { dailyPair, dayOf, dayLabel } from './daily';
 export type { DailyPair } from './daily';
 export { chainBetween } from './connect';
 export { nextStop, DRIFT_HTML, DRIFT_MS } from './drift';
+export { LEVELS, LEVEL_LABEL, rate, obscurity } from './difficulty';
+export type { Level } from './difficulty';

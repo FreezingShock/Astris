@@ -452,3 +452,60 @@ describe('the race card hint', () => {
     expect(hudHtml(race)).toContain("<div class='hint'>A river in &lt;Spain&gt;.</div>");
   });
 });
+
+describe('difficulty levels', () => {
+  it('rates by clicks past two plus how thin the target is', async () => {
+    const { rate, obscurity, miss, savedLevel, saveLevel, walkSteps, levelPickerHtml } = await import('../../src/modes/difficulty');
+    expect([obscurity(120), obscurity(60), obscurity(59), obscurity(12), obscurity(11), obscurity(0)]).toEqual([0, 0, 1, 1, 2, 2]);
+    expect(rate(2, 100)).toBe('easy');
+    expect(rate(3, 100)).toBe('easy');
+    expect(rate(3, 30)).toBe('medium');
+    expect(rate(4, 100)).toBe('medium');
+    expect(rate(4, 30)).toBe('hard');
+    expect(rate(3, 5)).toBe('hard');
+    expect(rate(5, 100)).toBe('hard');
+    expect(miss('medium', 3, 30)).toBe(0);
+    expect(miss('easy', 4, 5)).toBeGreaterThan(miss('easy', 3, 30));
+    expect(walkSteps('easy', () => 0)).toBe(2);
+    expect(walkSteps('hard', () => 0.9)).toBe(5);
+    const mem = new Map<string, string>();
+    const store = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v) };
+    expect(savedLevel(store)).toBe('medium');
+    saveLevel('hard', store);
+    expect(savedLevel(store)).toBe('hard');
+    mem.set('astris:level', 'bogus');
+    expect(savedLevel(store)).toBe('medium');
+    expect(savedLevel(undefined)).toBe('medium');
+    expect(levelPickerHtml('easy')).toContain("data-level='easy' aria-pressed='true'");
+  });
+
+  it('picks easier walks for easy and longer ones for hard on a graph with hubs and thin pages', async () => {
+    const { rate } = await import('../../src/modes/difficulty');
+    // A ring of 40 articles, each linking to the next two; every fourth one is a hub with many extra links.
+    const names = Array.from({ length: 40 }, (_, i) => 'A' + i);
+    const links: Record<string, string[]> = {};
+    names.forEach((n, i) => {
+      const out = [names[(i + 1) % 40] ?? '', names[(i + 2) % 40] ?? ''];
+      if (i % 4 === 0) for (let k = 0; k < 70; k++) out.push('x' + i + '_' + k);
+      links[n] = out;
+    });
+    for (const n of Object.keys(links)) for (const x of links[n] ?? []) if (!links[x]) links[x] = [];
+    const mk = (): DataProvider => {
+      const p = fake(links);
+      p.random = () => Promise.resolve('A' + Math.floor(Math.random() * 40));
+      return p;
+    };
+    const avg = async (level: 'easy' | 'medium' | 'hard'): Promise<number> => {
+      let sum = 0;
+      for (let i = 0; i < 40; i++) {
+        const pair = await randomPair(mk(), Math.random, level);
+        expect(pair.level).toBe(rate(pair.par, (links[pair.target] ?? []).length));
+        sum += pair.par;
+      }
+      return sum / 40;
+    };
+    const easy = await avg('easy');
+    const hard = await avg('hard');
+    expect(hard).toBeGreaterThan(easy);
+  });
+});
