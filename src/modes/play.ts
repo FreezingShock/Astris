@@ -1,6 +1,6 @@
 import type { ArticleSummary, Constellation, DataProvider, Suggestion } from '../types';
 import { clock, esc } from '../lib';
-import { subjectRgb } from '../styles';
+import { replay, subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
 import { Discovery, Share, Tip, initKeyboard } from '../comforts';
 import { Connect, connectHtml, type ConnectState } from './connect';
@@ -358,7 +358,10 @@ export class Play {
     if (!cur) return;
     const el = $('panel');
     el.innerHTML = panelHtml(cur, this.engine.trail, this.engine.visited, this.summary, this.copy.panelNote);
-    if (scrollTop) el.scrollTop = 0;
+    if (scrollTop) {
+      el.scrollTop = 0;
+      replay(el, 'swap');
+    }
   }
 
   private travelled(title: string, now: number): void {

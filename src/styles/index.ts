@@ -82,3 +82,5 @@ export function stylesReady(): Promise<void> {
     check();
   });
 }
+
+export { replay, scrollBehavior, jumpTo } from './motion';
