@@ -309,6 +309,20 @@ export class Engine {
     this.zoomAt({ x: this.W / 2, y: this.H / 2 }, factor);
   }
 
+  /** Where the view is heading: the world point at its middle and the zoom. Restoring it later with setView() gives the same picture. */
+  get view(): Camera {
+    return { x: this.tgt.x, y: this.tgt.y, z: this.tgt.z };
+  }
+
+  /** Put the view somewhere at once, without easing. A view that is not finite or has no zoom is ignored. */
+  setView(v: Camera): void {
+    if (![v.x, v.y, v.z].every(Number.isFinite) || v.z <= 0) return;
+    this.tgt.x = this.cam.x = v.x;
+    this.tgt.y = this.cam.y = v.y;
+    this.tgt.z = this.cam.z = v.z;
+    this.kick();
+  }
+
   /** Centre the live constellation and fit it to the view. */
   fit(): void {
     const cur = this.current;
