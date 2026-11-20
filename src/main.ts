@@ -9,7 +9,7 @@ import './styles/motion.css';
 
 import { SampleProvider, WikipediaProvider } from './data';
 import { Play, type SourceCopy } from './modes';
-import { Site } from './site';
+import { Site, onPlayLink } from './site';
 import { stylesReady } from './styles';
 import { initTilt } from './styles/tilt';
 import type { DataProvider } from './types';
@@ -50,6 +50,8 @@ void stylesReady().then(() => {
   const play = new Play(provider, copy, () => state.site?.onMap ?? false);
   // When Wikipedia asks for a pause, say so quietly instead of looking stuck.
   if (live) live.onThrottle = (waitMs) => play.toast('Slowing down for Wikipedia. Back in ' + Math.ceil(waitMs / 1000) + ' seconds.');
+  // A link with a journey in it (?j= or ?t=) is handled before the article or race it may also carry.
+  onPlayLink((query) => play.openJourneyLink(query));
   const site = new Site(provider, play);
   state.site = site;
   site.start();

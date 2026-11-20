@@ -1,6 +1,6 @@
 import type { ArticleSummary, Constellation, DataProvider, Suggestion } from '../types';
 import { esc } from '../lib';
-import { replay, subjectRgb } from '../styles';
+import { prefersReducedMotion, replay, subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
 import { Atlas, Collection } from '../sky';
 import { Celebration, Discovery, Share, Sound, Tip, Tour, firstLine, initKeyboard, tierOf } from '../comforts';
@@ -9,6 +9,7 @@ import { dailyPair, dayOf, recent, saveDaily, shareText, streak } from './daily'
 import { recordRun } from './stats';
 import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
 import { diagnose } from '../data';
+import { Journey, JourneyStore, browserStorage, decodePath, savedCon, type JourneyRecord } from '../journey';
 import { OutageScreen } from './outage';
 import { legendHtml, panelHtml, suggestNext } from './panel';
 import { graphOf, route } from './graph';
@@ -60,6 +61,13 @@ export class Play {
   private readonly fx: Celebration;
   private readonly tour: Tour;
   private seq = 0;
+  /** The journey of this tab: every centre visited in Explore, saved so that a refresh rebuilds the map. */
+  private readonly journey: Journey;
+  private readonly journeys = new JourneyStore(browserStorage());
+  private restoreSeq = 0;
+  /** True while a saved or shared journey is being replayed onto the map. */
+  private restoring = false;
+  private resume: HTMLButtonElement | null = null;
   private warmTimer = 0;
   private readonly warmed = new Set<string>();
   private driftTimer = 0;
@@ -82,6 +90,7 @@ export class Play {
     private readonly copy: SourceCopy,
     private readonly isOpen: () => boolean,
   ) {
+    this.journey = new Journey(this.journeys);
     this.tip = new Tip(
       $('tip'),
       (title) => !!this.race && !this.race.done && title === this.race.target,
@@ -132,6 +141,7 @@ export class Play {
       },
       onMap: this.isOpen,
       toast: (message) => this.toast(message),
+      journey: () => ({ id: this.journey.id, token: this.journey.token, steps: this.journey.steps }),
     });
     this.fx = new Celebration($('play'));
     this.tour = new Tour({ host: $('play'), canvas: $('sky'), search: this.gq, onRace: () => void this.newRace() });
@@ -161,6 +171,7 @@ export class Play {
   enter(): void {
     this.engine.enable();
     this.share.sync();
+    this.offerResume();
     if (!this.engine.current) void this.open(DEFAULT_ARTICLE, false);
     // The tutorial greets a first visit to the plain map, never a shared link.
     if (!this.tour.seen && !this.tour.open && !location.search) this.tour.start();
@@ -175,7 +186,11 @@ export class Play {
   /** Start over from one article, in Explore unless told otherwise. */
   async open(title: string, explore = true): Promise<void> {
     this.atlas?.close(false);
-    if (explore) this.setMode('explore');
+    if (explore) {
+      this.setMode('explore');
+      this.hideResume();
+    }
+    this.cancelRestore();
     const data = await this.load(title, (d) => this.reset(d));
     if (data) this.reset(data);
   }
@@ -196,8 +211,10 @@ export class Play {
     const begun = this.engine.begin(title);
     const go = (d: Constellation): void => {
       this.collect(d);
+      this.recordStep(d);
       this.engine.travel(d);
     };
+    this.cancelRestore();
     const data = await this.load(title, go);
     if (data) go(data);
     else if (begun) this.engine.abort(title);
@@ -227,6 +244,8 @@ export class Play {
   /** Start a race between two articles. Par is searched for in the background unless it is already known. */
   async startRace(start: string, target: string, knownPar?: number, day?: number, hard = false, rules: Rules = day === undefined ? loadRules() : NO_RULES): Promise<void> {
     this.atlas?.close(false);
+    this.hideResume();
+    this.cancelRestore();
     const seq = ++this.raceSeq;
     this.picking = false;
     this.setMode(day === undefined ? 'race' : 'daily');
@@ -403,6 +422,8 @@ export class Play {
     this.atlas?.close(false);
     if (m !== 'drift') clearTimeout(this.driftTimer);
     this.mode = m;
+    // Only Explore and Drift are saved. A race has a clock and a score, and Connect two walks a fixed chain; their own links already restart them.
+    if (m !== 'explore' && m !== 'drift') this.journey.detach();
     document.querySelectorAll<HTMLElement>('#modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
     if (m !== 'connect' && this.connect.state) {
       this.connect.stop();
@@ -510,15 +531,156 @@ export class Play {
 
   private reset(data: Constellation): void {
     this.collect(data);
+    if (!this.restoring) {
+      if (this.mode === 'explore' || this.mode === 'drift') this.journey.begin(data);
+      else this.journey.detach();
+    }
     this.engine.reset(data);
   }
 
+  /** The reader acted while a journey was being rebuilt: stop the replay where it is. */
+  private cancelRestore(): void {
+    this.restoreSeq++;
+    this.restoring = false;
+  }
+
+  /** Add a visited centre to this tab's journey. */
+  private recordStep(data: Constellation): void {
+    if (this.restoring || (this.mode !== 'explore' && this.mode !== 'drift')) return;
+    this.journey.step(data);
+    if (this.journey.id) this.hideResume();
+  }
+
+  /* ---------- journeys: refresh, resume and shared links ---------- */
+
+  /**
+   * Act on the journey parts of a /play link: "?j=" is this browser's own saved journey and "?t=" is a path
+   * someone shared. Returns true when the journey took over; false lets the link's article or race open as usual.
+   */
+  openJourneyLink(query: URLSearchParams): boolean {
+    const token = query.get('t');
+    if (token !== null) {
+      const path = decodePath(token);
+      if (path) {
+        void this.restore(path, null);
+        return true;
+      }
+      this.notice('That journey link could not be read. Opening the map instead.');
+      return false;
+    }
+    const id = query.get('j');
+    if (id === null) return false;
+    const rec = this.journeys.load(id);
+    if (rec) {
+      void this.restore(rec.path, rec);
+      return true;
+    }
+    if (!query.has('a')) this.notice('That journey is not saved in this browser. Starting fresh.');
+    return false;
+  }
+
+  /**
+   * Rebuild a journey on the map: the first centre appears, then each later one in turn, just as it grew.
+   * A saved journey replays from what it kept, so it needs no network; a shared path fetches each centre in turn,
+   * at the provider's own pace. Anything the reader does meanwhile cancels the replay.
+   */
+  private async restore(path: readonly string[], rec: JourneyRecord | null): Promise<void> {
+    const mine = ++this.restoreSeq;
+    ++this.seq;
+    this.atlas?.close(false);
+    this.hideResume();
+    this.setMode('explore');
+    this.restoring = true;
+    const wait = prefersReducedMotion() ? 0 : Math.min(320, Math.floor(3200 / path.length));
+    const seen = new Map<string, Constellation>();
+    const shown: Constellation[] = [];
+    let skipped = 0;
+    let failed: string | null = null;
+    try {
+      for (const title of path) {
+        if (mine !== this.restoreSeq) return;
+        let data: Constellation | null | undefined = seen.get(title) ?? (rec ? savedCon(rec, title, Date.now()) : null);
+        if (!data) {
+          try {
+            data = await this.provider.constellation(title);
+          } catch (err) {
+            if (mine !== this.restoreSeq) return;
+            // An article that was renamed or deleted is skipped; anything else ends the replay where it got to.
+            if ((await diagnose(err)) === 'missing' && shown.length) {
+              skipped++;
+              continue;
+            }
+            if (!shown.length) {
+              this.restoring = false;
+              await this.report(err, () => this.restore(path, rec), title);
+              return;
+            }
+            failed = title;
+            break;
+          }
+          this.clearOutage();
+        }
+        if (mine !== this.restoreSeq) return;
+        seen.set(title, data);
+        const last = shown[shown.length - 1];
+        if (last && last.center.title === data.center.title) continue;
+        if (!shown.length) this.reset(data);
+        else {
+          if (wait) await new Promise((done) => window.setTimeout(done, wait));
+          if (mine !== this.restoreSeq) return;
+          this.collect(data);
+          this.engine.travel(data);
+        }
+        shown.push(data);
+      }
+    } finally {
+      if (mine === this.restoreSeq) this.restoring = false;
+    }
+    if (mine !== this.restoreSeq || !shown.length) return;
+    // Keep recording on the same journey when it is this browser's own and whole; a shared or partial one becomes a journey of its own.
+    if (rec && shown.length === path.length) this.journey.adopt(rec);
+    else this.journey.adoptPath(shown);
+    const cur = this.engine.current;
+    if (cur) this.changed(cur);
+    if (failed) this.toast('Wikipedia did not answer for “' + failed + '”. Rebuilt ' + shown.length + ' of ' + path.length + ' stops.');
+    else if (skipped) this.toast(skipped + (skipped === 1 ? ' article' : ' articles') + ' no longer exist and were skipped.');
+  }
+
+  /** A word about a link that did not work. It waits for the article's own arrival toasts, so that it is the one left on screen. */
+  private notice(message: string): void {
+    window.setTimeout(() => this.toast(message), 1600);
+  }
+
+  /** On a plain visit to the map, offer to pick up the last journey. It never starts one by itself. */
+  private offerResume(): void {
+    if (this.resume || location.search || this.engine.current) return;
+    const rec = this.journeys.latest(3);
+    if (!rec) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.id = 'resume';
+    b.className = 'gbtn';
+    b.textContent = 'Resume journey · ' + rec.path.length + ' stops';
+    b.title = 'Rebuild the journey you left, starting from ' + (rec.path[0] ?? '');
+    b.addEventListener('click', () => void this.restore(rec.path, rec));
+    ($('surprise').parentElement ?? $('play')).prepend(b);
+    this.resume = b;
+  }
+
+  private hideResume(): void {
+    this.resume?.remove();
+    this.resume = null;
+  }
+
   private changed(cur: Con): void {
+    const replaying = this.restoring;
     $('tint').style.color = 'rgb(' + subjectRgb(cur.subject) + ')';
     $('legend').innerHTML = legendHtml(cur);
     this.summary = null;
     this.panel(true);
     this.share.sync();
+    // A replay changes the centre many times in a second; only the last one asks for its summary.
+    if (replaying) return;
     const show = (s: ArticleSummary): void => {
       if (this.engine.current !== cur) return;
       this.summary = s;
@@ -540,6 +702,7 @@ export class Play {
   }
 
   private travelled(title: string, now: number): void {
+    if (this.restoring) return;
     this.sound.arrive(title);
     this.tour.advance('travel');
     const race = this.race;
