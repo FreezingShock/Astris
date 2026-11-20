@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Astris Website Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ASTRIS DESIGN SYSTEM v1
+   Layout idea: two worlds. The site around the game is an encyclopedia page (header, sidebar, tabs, boxes, footer).
+   The game is open space: one glowing constellation that grows as you travel. The logo and link colors bridge them. */
+:root {
+  --page: #f8f9fa;        /* chrome behind the article */
+  --surface: #ffffff;     /* the article itself */
+  --ink: #202122;
+  --muted: #54595d;
+  --rule: #a2a9b1;
+  --rule-soft: #c8ccd1;
+  --tint: #eaecf0;        /* box headers, infobox */
+  --link: #3366cc;
+  --visited: #6b4ba1;
+  --redlink: #bf3c2c;
+  --star: #3366cc;        /* logo star edge */
+  --star-core: #86abf7;
+  /* space palette: fixed, the game is always night */
+  --night: #07080c;
+  --night-2: #0e1016;
+  --starlight: #eceaf2;
+  --dust: #9a9db0;
+  --neb-blue: #6ea3ff;
+  --neb-violet: #a48bf5;
+  --neb-rose: #f08aa9;
+  --serif: "Linux Libertine", "Libertinus Serif", Georgia, Times, "Source Serif 4", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Lato, Helvetica, Arial, sans-serif;
+  --logo: "Source Serif 4", Georgia, serif;
+  --mono: "IBM Plex Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0c0d10; --surface: #121419; --ink: #e9e7e1; --muted: #a2a5ae; --rule: #454a54; --rule-soft: #2f333b; --tint: #1b1e25;
+    --link: #7aa9ff; --visited: #b59cf2; --redlink: #ff7b6e; --star: #5a8bf2; --star-core: #ffffff;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0c0d10; --surface: #121419; --ink: #e9e7e1; --muted: #a2a5ae; --rule: #454a54; --rule-soft: #2f333b; --tint: #1b1e25;
+  --link: #7aa9ff; --visited: #b59cf2; --redlink: #ff7b6e; --star: #5a8bf2; --star-core: #ffffff;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.6; }
+a, .lk { color: var(--link); text-decoration: none; cursor: pointer; background: none; border: 0; padding: 0; font: inherit; text-align: left; }
+a:hover, .lk:hover { text-decoration: underline; }
+a.visited { color: var(--visited); } a.new { color: var(--redlink); }
+:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.mono { font-family: var(--mono); }
+body[data-view="site"] #play, body[data-view="play"] #site { display: none; }
+
+/* logo */
+.logo { display: inline-flex; align-items: center; font-family: var(--logo); font-weight: 600; font-size: 30px; letter-spacing: -0.01em; color: var(--ink); line-height: 1; white-space: nowrap; text-decoration: none; }
+.logo:hover { text-decoration: none; }
+.logo .i { position: relative; display: inline-block; line-height: 1; }
+.logo svg { position: absolute; left: 50%; bottom: .665em; width: .26em; height: .26em; margin-left: -.13em; overflow: visible; transform-origin: 50% 50%; animation: twinkle 7s ease-in-out infinite; }
+@keyframes twinkle { 0%, 62%, 100% { transform: scale(1) rotate(0deg); } 68% { transform: scale(1.28) rotate(45deg); } 74% { transform: scale(1) rotate(90deg); } }
+
+/* ============ THE SITE: encyclopedia chrome ============ */
+#site { min-height: 100%; display: flex; flex-direction: column; }
+.vh { display: flex; align-items: center; gap: 18px; padding: 8px 24px; background: var(--surface); border-bottom: 1px solid var(--rule-soft); flex-wrap: wrap; }
+.vh .menu { width: 34px; height: 34px; border: 0; background: none; color: var(--ink); cursor: pointer; border-radius: 2px; font-size: 18px; }
+.vh .menu:hover { background: var(--tint); }
+.vsearch { display: flex; flex: 1; min-width: 200px; max-width: 520px; }
+.vsearch input { flex: 1; min-width: 0; font: inherit; padding: 6px 10px; border: 1px solid var(--rule); border-right: 0; border-radius: 2px 0 0 2px; background: var(--surface); color: var(--ink); }
+.vsearch input:focus { outline: none; border-color: var(--link); box-shadow: inset 0 0 0 1px var(--link); }
+.vsearch button { font: inherit; font-weight: 700; padding: 6px 12px; border: 1px solid var(--rule); border-radius: 0 2px 2px 0; background: var(--page); color: var(--ink); cursor: pointer; }
+.vsearch button:hover { background: var(--surface); }
+.vlinks { display: flex; gap: 16px; margin-left: auto; flex-wrap: wrap; }
+.vbody { flex: 1; display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: 0 28px; max-width: 1400px; width: 100%; margin: 0 auto; padding: 20px 24px 0; }
+.vside { font-size: 13.5px; }
+.vside h3 { font-family: var(--sans); font-size: 13.5px; font-weight: 700; margin: 0 0 4px; padding-bottom: 6px; border-bottom: 1px solid var(--rule-soft); color: var(--ink); }
+.vside ul { list-style: none; margin: 0 0 22px; padding: 0; }
+.vside li { padding: 3px 0; }
+.vside small { color: var(--muted); }
+.vmain { background: var(--surface); border: 1px solid var(--rule-soft); border-bottom: 0; padding: 0 30px 30px; min-width: 0; }
+.vtabs { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--rule-soft); margin: 0 -30px 18px; padding: 10px 30px 0; flex-wrap: wrap; gap: 4px 16px; }
+.vtabs div { display: flex; gap: 2px; }
+.vtabs button { font: inherit; background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 10px 6px; color: var(--link); cursor: pointer; margin-bottom: -1px; }
+.vtabs button:hover { border-bottom-color: var(--rule); }
+.vtabs button[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 700; }
+.page { display: none; } .page.on { display: block; }
+.vmain h1 { font-family: var(--serif); font-weight: 400; font-size: 29px; line-height: 1.25; margin: 0; padding-bottom: 3px; border-bottom: 1px solid var(--rule); text-wrap: balance; }
+.vmain h2 { font-family: var(--serif); font-weight: 400; font-size: 24px; line-height: 1.3; margin: 26px 0 8px; padding-bottom: 3px; border-bottom: 1px solid var(--rule); display: flex; align-items: baseline; gap: 10px; }
+.vmain h3 { font-size: 16.5px; margin: 18px 0 4px; }
+.vmain p { margin: 7px 0; max-width: 78ch; }
+.sub { font-size: 13px; color: var(--muted); margin: 2px 0 12px; }
+.edit { font-family: var(--sans); font-size: 13px; color: var(--muted); }
+.hat { font-style: italic; padding-left: 22px; color: var(--muted); margin: 0 0 10px; }
+
+/* main page boxes */
+.welcome { text-align: center; border: 1px solid var(--rule-soft); background: var(--page); padding: 22px 16px 20px; position: relative; overflow: hidden; }
+.welcome::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: linear-gradient(90deg, var(--neb-blue), var(--neb-violet), var(--neb-rose)); }
+.welcome .big { font-family: var(--serif); font-size: 30px; line-height: 1.2; }
+.welcome .cta { display: inline-flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; justify-content: center; }
+.btn { font: inherit; font-weight: 700; padding: 7px 16px; border: 1px solid var(--rule); border-radius: 2px; background: var(--page); color: var(--ink); cursor: pointer; }
+.btn:hover { background: var(--surface); border-color: var(--muted); }
+.btn.go { background: var(--link); border-color: var(--link); color: #fff; }
+.btn.go:hover { filter: brightness(1.1); }
+.cols { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+.cols > div { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.box { border: 1px solid var(--rule-soft); }
+.box > h2 { font-family: var(--sans); font-weight: 700; font-size: 16.5px; margin: 0; padding: 7px 12px; background: var(--tint); border-bottom: 1px solid var(--rule-soft); }
+.box > .in { padding: 12px 14px 14px; }
+.box.a > h2 { box-shadow: inset 3px 0 0 var(--neb-blue); } .box.b > h2 { box-shadow: inset 3px 0 0 var(--neb-violet); } .box.c > h2 { box-shadow: inset 3px 0 0 var(--neb-rose); }
+.mini { position: relative; height: 250px; background: var(--night); border: 1px solid var(--rule-soft); margin-bottom: 10px; overflow: hidden; }
+.mini canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.box ul { margin: 4px 0; padding-left: 22px; } .box li { margin: 3px 0; }
+.tag { font-size: 12px; border: 1px solid var(--rule-soft); border-radius: 2px; padding: 0 5px; color: var(--muted); white-space: nowrap; }
+.tag.live { color: var(--link); border-color: var(--link); }
+.race { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-family: var(--serif); font-size: 21px; margin: 2px 0 6px; }
+.race span { color: var(--muted); font-family: var(--sans); font-size: 14px; }
+.levels { list-style: none; padding: 0 !important; margin: 0; }
+.levels li { display: grid; grid-template-columns: 26px 1fr; gap: 8px; align-items: center; padding: 5px 0; border-top: 1px solid var(--rule-soft); }
+.levels li:first-child { border-top: 0; }
+.dot { width: 14px; height: 14px; border-radius: 50%; justify-self: center; background: var(--c); box-shadow: 0 0 8px var(--c), 0 0 2px var(--c); }
+.levels .dot, .demo .dot { box-shadow: 0 0 0 5px var(--night), 0 0 9px 5px var(--c); }
+.vfoot { grid-column: 2; padding: 18px 0 26px; font-size: 12.5px; color: var(--muted); }
+.vfoot ul { list-style: none; padding: 0; margin: 8px 0 0; display: flex; gap: 6px 18px; flex-wrap: wrap; }
+
+/* design system page */
+.toc { display: inline-block; border: 1px solid var(--rule-soft); background: var(--page); padding: 8px 16px 10px; margin: 8px 0; }
+.toc b { display: block; text-align: center; } .toc ol { margin: 4px 0 0; padding-left: 20px; }
+.infobox { float: right; width: 280px; margin: 0 0 14px 22px; border: 1px solid var(--rule-soft); background: var(--page); font-size: 13px; }
+.infobox .cap { text-align: center; font-weight: 700; padding: 6px; background: var(--tint); }
+.infobox .hero { background: var(--night); padding: 26px 10px; text-align: center; }
+.infobox .hero .logo { color: var(--starlight); font-size: 38px; }
+.infobox dl { margin: 0; display: grid; grid-template-columns: 96px 1fr; }
+.infobox dt, .infobox dd { margin: 0; padding: 4px 8px; border-top: 1px solid var(--rule-soft); } .infobox dt { font-weight: 700; }
+.swatches { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0; }
+.swatches div { width: 108px; font-size: 12.5px; line-height: 1.35; }
+.swatches i { display: block; height: 46px; border: 1px solid var(--rule-soft); margin-bottom: 4px; }
+.swatches code { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+table.wt { border-collapse: collapse; margin: 8px 0; font-size: 13.5px; }
+table.wt th, table.wt td { border: 1px solid var(--rule); padding: 5px 10px; text-align: left; vertical-align: top; }
+table.wt th { background: var(--tint); }
+.demo { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+.spacecard { background: var(--night); color: var(--starlight); padding: 16px 18px; display: flex; gap: 22px; align-items: center; flex-wrap: wrap; clear: both; }
+
+/* ============ THE GAME: open space ============ */
+#play { position: fixed; inset: 0; background: var(--night); color: var(--starlight); overflow: hidden; color-scheme: dark;
+  --link: #8fb4ff; --visited: #c0a8f7; --ink: #eceaf2; --muted: #9a9db0; --rule-soft: rgba(255,255,255,.14); --surface: rgba(14,16,22,.86); }
+#play .neb { position: absolute; inset: -20%; pointer-events: none; opacity: .9;
+  background: radial-gradient(38% 34% at 24% 30%, rgba(110,163,255,.17), transparent 70%), radial-gradient(34% 36% at 76% 64%, rgba(164,139,245,.15), transparent 70%), radial-gradient(26% 24% at 62% 18%, rgba(240,138,169,.09), transparent 70%);
+  animation: drift 46s ease-in-out infinite alternate; will-change: transform; }
+#play .tint { position: absolute; inset: 0; pointer-events: none; color: rgb(110,163,255); opacity: .2; transition: color 1.4s ease; background: radial-gradient(46% 52% at 40% 52%, currentColor, transparent 72%); }
+@keyframes drift { from { transform: translate3d(-2%, -1%, 0) scale(1); } to { transform: translate3d(2%, 1.5%, 0) scale(1.07); } }
+#play canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+#play canvas.drag { cursor: grabbing; }
+.gbar { position: absolute; left: 0; right: 0; top: 0; z-index: 3; display: flex; align-items: center; gap: 16px; padding: 9px 18px; background: linear-gradient(rgba(7,8,12,.92), rgba(7,8,12,.6) 70%, transparent); flex-wrap: wrap; }
+.gbar .logo { font-size: 26px; color: var(--starlight); }
+.gsearch { position: relative; flex: 1; min-width: 190px; max-width: 420px; }
+.gsearch input { width: 100%; font-family: var(--serif); font-size: 17px; padding: 6px 12px; border: 1px solid rgba(255,255,255,.22); border-radius: 2px; background: rgba(14,16,22,.8); color: var(--starlight); }
+.gsearch input:focus { outline: none; border-color: var(--neb-blue); box-shadow: 0 0 0 1px var(--neb-blue), 0 0 18px rgba(110,163,255,.35); }
+.gsugg { list-style: none; margin: 2px 0 0; padding: 0; position: absolute; left: 0; right: 0; top: 100%; background: rgba(14,16,22,.97); border: 1px solid rgba(255,255,255,.18); display: none; }
+.gsugg.open { display: block; }
+.gsugg li { display: flex; justify-content: space-between; gap: 10px; padding: 5px 12px; cursor: pointer; border-top: 1px solid rgba(255,255,255,.08); font-family: var(--serif); font-size: 16px; color: var(--link); }
+.gsugg li:first-child { border-top: 0; }
+.gsugg li.on { background: rgba(110,163,255,.14); box-shadow: inset 3px 0 0 var(--neb-blue); }
+.gsugg li span { font-family: var(--sans); font-size: 12px; color: var(--muted); white-space: nowrap; align-self: center; }
+.gsugg mark { background: rgba(240,138,169,.3); color: inherit; }
+.modes { display: flex; gap: 0; border-bottom: 1px solid rgba(255,255,255,.16); }
+.modes button { font: inherit; background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 7px 11px 5px; color: var(--link); cursor: pointer; white-space: nowrap; }
+.modes button:hover { border-bottom-color: rgba(255,255,255,.3); }
+.modes button[aria-pressed="true"] { color: var(--starlight); border-bottom-color: var(--starlight); font-weight: 700; }
+.modes sup { font-size: 10px; color: var(--muted); margin-left: 3px; font-weight: 400; }
+.gbar .right { margin-left: auto; display: flex; gap: 16px; align-items: center; }
+.gbtn { font: inherit; font-weight: 700; padding: 5px 12px; border: 1px solid rgba(255,255,255,.28); border-radius: 2px; background: rgba(255,255,255,.06); color: var(--starlight); cursor: pointer; }
+.gbtn:hover { background: rgba(255,255,255,.13); box-shadow: 0 0 16px rgba(164,139,245,.35); }
+.card { background: var(--surface); border: 1px solid var(--rule-soft); backdrop-filter: blur(6px); }
+#panel { position: absolute; right: 16px; top: 74px; bottom: 54px; width: 318px; z-index: 2; overflow: auto; padding: 14px 16px 18px; font-size: 13.5px; }
+#panel h1 { font-family: var(--serif); font-weight: 400; font-size: 26px; line-height: 1.2; margin: 0; padding-bottom: 3px; border-bottom: 1px solid rgba(255,255,255,.3); }
+#panel h2 { font-family: var(--serif); font-weight: 400; font-size: 18px; margin: 16px 0 5px; padding-bottom: 2px; border-bottom: 1px solid rgba(255,255,255,.2); }
+#panel .sub { color: var(--muted); } #panel p { margin: 6px 0; }
+#panel ul { margin: 0; padding-left: 20px; } #panel li small { color: var(--muted); }
+#panel ol { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; } #panel ol li:not(:last-child)::after { content: " → "; color: var(--muted); white-space: pre; }
+#panel .ib { border: 1px solid rgba(255,255,255,.16); margin: 8px 0; display: grid; grid-template-columns: 104px 1fr; font-size: 12.5px; }
+#panel .ib > * { padding: 3px 8px; border-top: 1px solid rgba(255,255,255,.1); } #panel .ib > :nth-child(-n+2) { border-top: 0; } #panel .ib b { font-weight: 700; }
+#legend { position: absolute; left: 16px; bottom: 54px; z-index: 2; padding: 9px 12px; font-size: 12.5px; }
+#legend b { display: block; margin-bottom: 4px; } #legend div { display: grid; grid-template-columns: 18px 1fr; gap: 7px; align-items: center; line-height: 1.75; } #legend .dot { justify-self: center; }
+#legend .dot { width: 9px; height: 9px; }
+#hud { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); z-index: 2; padding: 8px 16px; display: none; text-align: center; max-width: calc(100% - 380px); }
+#hud.on { display: block; }
+#hud .line { font-family: var(--serif); font-size: 19px; } #hud .line em { font-style: normal; color: var(--neb-rose); }
+#hud .stats { font-family: var(--mono); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; align-items: baseline; }
+#hud.win { box-shadow: 0 0 0 1px var(--neb-rose), 0 0 34px rgba(240,138,169,.45); }
+#tip { position: absolute; z-index: 4; pointer-events: none; padding: 7px 11px; font-size: 12.5px; display: none; max-width: 280px; }
+#tip b { font-family: var(--serif); font-weight: 400; font-size: 17px; display: block; color: var(--link); } #tip span { color: var(--muted); }
+.gfoot { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; display: flex; justify-content: space-between; gap: 12px; padding: 10px 18px; font-size: 12.5px; color: var(--muted); background: linear-gradient(transparent, rgba(7,8,12,.85)); flex-wrap: wrap; }
+.gfoot .mono { font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.gzoom { position: absolute; left: 16px; top: 78px; z-index: 2; display: flex; flex-direction: column; }
+.gzoom button { width: 32px; height: 30px; font: inherit; background: none; border: 0; border-top: 1px solid rgba(255,255,255,.12); color: var(--starlight); cursor: pointer; }
+.gzoom button:first-child { border-top: 0; } .gzoom button:hover { color: var(--neb-blue); }
+#toast { position: absolute; left: 50%; bottom: 62px; transform: translateX(-50%); z-index: 4; padding: 8px 14px; font-size: 13px; display: none; max-width: min(520px, 90%); text-align: center; }
+
+@media (max-width: 900px) {
+  .vbody { grid-template-columns: minmax(0, 1fr); padding: 12px 12px 0; }
+  .vside { display: none; } .vside.open { display: block; padding: 0 4px; }
+  .vfoot { grid-column: 1; } .cols { grid-template-columns: minmax(0, 1fr); }
+  .vmain { padding: 0 16px 22px; } .vtabs { margin: 0 -16px 14px; padding: 8px 16px 0; }
+  .infobox { float: none; width: auto; margin: 10px 0; }
+  #panel { display: none; } #hud { max-width: calc(100% - 24px); top: 118px; } #legend { display: none; } .gzoom { top: 126px; }
+  .gbar .right .lk { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .logo svg, #play .neb { animation: none; } }
+</style>
+</head>
+<body data-view="site">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <radialGradient id="lg"><stop offset="0" style="stop-color:var(--star-core)"/><stop offset="1" style="stop-color:var(--star)"/></radialGradient>
+  <radialGradient id="lgn"><stop offset="0" stop-color="#ffffff"/><stop offset=".36" stop-color="#a9c6ff"/><stop offset="1" stop-color="#5a8bf2"/></radialGradient>
+</defs></svg>
+
+<!-- ======================= THE SITE ======================= -->
+<div id="site">
+  <header class="vh">
+    <button class="menu" id="menuBtn" type="button" aria-label="Toggle main menu">&#9776;</button>
+    <a class="logo" data-go="main-page" aria-label="Astris, main page">Astr<span class="i">&#305;<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M30 0 Q33 27 60 30 Q33 33 30 60 Q27 33 0 30 Q27 27 30 0 Z" fill="url(#lg)"/></svg></span>s</a>
+    <form class="vsearch" id="vsearch" role="search">
+      <input id="vq" type="search" placeholder="Search Astris" aria-label="Search Astris" autocomplete="off">
+      <button type="submit">Search</button>
+    </form>
+    <nav class="vlinks" aria-label="Site">
+      <a data-go="play">Play</a><a data-race="1">Today's race</a><a data-go="design-system">Design system</a>
+    </nav>
+  </header>
+
+  <div class="vbody">
+    <nav class="vside" id="vside" aria-label="Main menu">
+      <h3>Main menu</h3>
+      <ul><li><a data-go="main-page">Main page</a></li><li><a data-go="play">Open the map</a></li><li><a data-race="1">Today's race</a></li><li><a data-random="1">Random article</a></li></ul>
+      <h3>Modes</h3>
+      <ul><li><a data-go="play">Explore</a></li><li><a data-race="1">Race</a></li><li>Connect two <small>(planned)</small></li><li>Daily constellation <small>(planned)</small></li><li>Drift <small>(planned)</small></li></ul>
+      <h3>Project</h3>
+      <ul><li><a data-go="design-system">Design system</a></li><li><a href="https://www.wikipedia.org/">Wikipedia</a></li></ul>
+    </nav>
+
+    <main class="vmain">
+      <div class="vtabs">
+        <div><button type="button" data-go="main-page" id="tab-main-page">Main Page</button><button type="button" data-go="design-system" id="tab-design-system">Design system</button></div>
+        <div><button type="button" aria-current="page">Read</button><button type="button" data-go="play">Play</button></div>
+      </div>
+
+      <!-- MAIN PAGE -->
+      <section class="page" id="page-main-page">
+        <div class="welcome">
+          <div class="big">Welcome to <a data-go="play">Astris</a>,</div>
+          <div>the map of everything <a href="https://www.wikipedia.org/">Wikipedia</a> connects.</div>
+          <div class="sub" style="margin:4px 0 0">Search any article. Watch what it links to grow around it. Click a star to travel there.</div>
+          <div class="cta"><button class="btn go" type="button" data-go="play">Open the map</button><button class="btn" type="button" data-race="1">Start today's race</button><button class="btn" type="button" data-random="1">Random article</button></div>
+        </div>
+        <div class="cols">
+          <div>
+            <div class="box a"><h2>Today's constellation</h2><div class="in">
+              <div class="mini"><canvas id="mini" aria-label="A small glowing constellation around the article Architecture"></canvas></div>
+              <p><b><a data-topic="Architecture">Architecture</a></b> and the articles closest to it. The brightest stars link both ways and share its name. Fainter ones are a single link away.</p>
+              <p><a data-topic="Architecture"><b>Open this constellation</b></a> · <a data-random="1">Try a random one</a></p>
+            </div></div>
+            <div class="box b"><h2>How a star is ranked</h2><div class="in">
+              <ul class="levels">
+                <li><span class="dot" style="--c:#ffffff;width:16px;height:16px"></span><span><b>1. All three.</b> Links out, links in, and a similar name. Biggest, brightest, closest in.</span></li>
+                <li><span class="dot" style="--c:#e6eaf7;width:13px;height:13px"></span><span><b>2. Two-way link.</b> Each article links to the other.</span></li>
+                <li><span class="dot" style="--c:#cdd3e6;width:10px;height:10px"></span><span><b>3. Link and name.</b> One link plus a similar name.</span></li>
+                <li><span class="dot" style="--c:#aab1cc;width:7px;height:7px"></span><span><b>4. One-way link.</b> A single link, out or in.</span></li>
+                <li><span class="dot" style="--c:#8f96b3;width:5px;height:5px"></span><span><b>5. Name only.</b> Similar name, no link. Smallest, at the edge.</span></li>
+              </ul>
+              <p style="margin-top:10px"><b>Colour is the subject.</b> Each subject gets its own light and its own wedge of the sky: <span id="topicKey"></span></p>
+            </div></div>
+          </div>
+          <div>
+            <div class="box c"><h2>Today's race</h2><div class="in">
+              <div class="race"><a data-topic="Brutalist architecture">Brutalist architecture</a> <span>to</span> <a data-topic="Jazz">Jazz</a></div>
+              <p>Get from the first article to the second by travelling star to star. Fewest clicks wins. <span id="parText"></span></p>
+              <p><button class="btn go" type="button" data-race="1">Start the race</button></p>
+            </div></div>
+            <div class="box a"><h2>Modes</h2><div class="in"><ul>
+              <li><b><a data-go="play">Explore</a></b> <span class="tag live">in this mockup</span><br>Wander. The star you click becomes the centre and the sky regrows around it.</li>
+              <li><b><a data-race="1">Race</a></b> <span class="tag live">in this mockup</span><br>Two articles, a click counter, a timer and a par.</li>
+              <li><b>Connect two</b> <span class="tag">planned</span><br>Type two topics and watch the shortest chain between them light up.</li>
+              <li><b>Daily constellation</b> <span class="tag">planned</span><br>One pair a day, the same for everyone. Compare paths.</li>
+              <li><b>Drift</b> <span class="tag">planned</span><br>The map explores itself. A screensaver for the curious.</li>
+            </ul></div></div>
+            <div class="box b"><h2>Planned comforts</h2><div class="in"><ul>
+              <li>A link that restores the exact map you are looking at</li>
+              <li>Hover previews with the article's picture and first line</li>
+              <li>Keyboard travel: <span class="mono">/</span> to search, arrows to move between stars</li>
+              <li>A count of every article and subject you have discovered</li>
+              <li>Soft sound on arrival, off by default</li>
+            </ul></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- DESIGN SYSTEM -->
+      <section class="page" id="page-design-system">
+        <h1>Astris design system</h1>
+        <div class="sub">From Astris, the map of Wikipedia</div>
+        <div class="infobox">
+          <div class="cap">Astris</div>
+          <div class="hero"><span class="logo">Astr<span class="i">&#305;<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M30 0 Q33 27 60 30 Q33 33 30 60 Q27 33 0 30 Q27 27 30 0 Z" fill="url(#lgn)"/></svg></span>s</span></div>
+          <dl><dt>Version</dt><dd>1, first full mockup</dd><dt>Worlds</dt><dd>Encyclopedia (site), Space (game)</dd><dt>Themes</dt><dd>Site follows light or dark. Game is always night.</dd><dt>Bridge</dt><dd>The logo and the link colors appear in both.</dd></dl>
+        </div>
+        <p>The <b>Astris design system</b> has two halves. Everything around the game looks and reads like an encyclopedia: a header with search, a side menu, tabs, bordered boxes, serif headings on a hairline rule, and blue links. The game itself is open space, where the same articles become stars.</p>
+        <div class="hat">This page is itself built from the system it describes.</div>
+        <div class="toc"><b>Contents</b><ol><li><a data-scroll="ds-colour">Colour</a></li><li><a data-scroll="ds-type">Type</a></li><li><a data-scroll="ds-links">Links</a></li><li><a data-scroll="ds-parts">Parts</a></li><li><a data-scroll="ds-space">Space</a></li><li><a data-scroll="ds-motion">Motion</a></li></ol></div>
+
+        <h2 id="ds-colour">Colour <span class="edit">[encyclopedia]</span></h2>
+        <div class="swatches">
+          <div><i style="background:var(--surface)"></i>Paper<br><code>--surface</code></div><div><i style="background:var(--page)"></i>Chrome<br><code>--page</code></div>
+          <div><i style="background:var(--tint)"></i>Box header<br><code>--tint</code></div><div><i style="background:var(--ink)"></i>Ink<br><code>--ink</code></div>
+          <div><i style="background:var(--link)"></i>Link<br><code>--link</code></div><div><i style="background:var(--visited)"></i>Visited<br><code>--visited</code></div><div><i style="background:var(--redlink)"></i>Missing<br><code>--redlink</code></div>
+        </div>
+        <h2>Colour <span class="edit">[space]</span></h2>
+        <div class="swatches">
+          <div><i style="background:var(--night)"></i>Night<br><code>--night</code></div><div><i style="background:var(--starlight)"></i>Starlight<br><code>--starlight</code></div>
+          <div><i style="background:var(--neb-blue)"></i>Nebula blue<br><code>--neb-blue</code></div><div><i style="background:var(--neb-violet)"></i>Nebula violet<br><code>--neb-violet</code></div><div><i style="background:var(--neb-rose)"></i>Nebula rose<br><code>--neb-rose</code></div>
+          <div><i style="background:linear-gradient(90deg,var(--neb-blue),var(--neb-violet),var(--neb-rose))"></i>Nebula sweep<br><code>blue → violet → rose</code></div>
+        </div>
+        <p>The sweep is used sparingly on the site: one thin line under the welcome box and the stripe on box headers. In space it is the light itself.</p>
+
+        <h2 id="ds-type">Type</h2>
+        <table class="wt">
+          <tr><th>Role</th><th>Face</th><th>Specimen</th></tr>
+          <tr><td>Headings, article titles, search results</td><td>Linux Libertine, then Georgia</td><td style="font-family:var(--serif);font-size:24px">Brutalist architecture</td></tr>
+          <tr><td>Body, menus, buttons</td><td>The reader's system sans-serif</td><td>Each article links to the other.</td></tr>
+          <tr><td>Logo only</td><td>Source Serif 4 Semibold</td><td><span class="logo" style="font-size:24px">Astris</span></td></tr>
+          <tr><td>Counters, timers, keys</td><td>IBM Plex Mono</td><td class="mono">3 clicks · 00:21 · par 3</td></tr>
+        </table>
+
+        <h2 id="ds-links">Links</h2>
+        <p>Link colour always means the same thing, on the site and on the map: <a>an article that exists</a>, <a class="visited">one you have already visited</a>, and <a class="new">one that does not exist yet</a>. Links are never underlined until hovered.</p>
+
+        <h2 id="ds-parts">Parts</h2>
+        <div class="demo"><button class="btn go" type="button">Primary action</button><button class="btn" type="button">Secondary</button><span class="tag live">in this mockup</span><span class="tag">planned</span>
+          <span class="vsearch" style="max-width:260px"><input type="search" placeholder="Search field" aria-label="Example search field"><button type="button">Search</button></span></div>
+        <p>Boxes have square corners, a one-pixel border and a tinted header. Nothing on the site casts a shadow or glows. Glow belongs to space.</p>
+
+        <h2 id="ds-space">Space</h2>
+        <div class="spacecard">
+          <span class="logo" style="color:var(--starlight);font-size:34px">Astr<span class="i">&#305;<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M30 0 Q33 27 60 30 Q33 33 30 60 Q27 33 0 30 Q27 27 30 0 Z" fill="url(#lgn)"/></svg></span>s</span>
+          <span style="display:flex;gap:14px;align-items:center" id="topicDots"></span>
+          <span style="font-size:13px;color:var(--dust);max-width:44ch">Stars are light, not shapes. Colour is the subject. Brightness and size carry the rank. Threads are thin and additive, so where many cross, the map gets brighter.</span>
+        </div>
+
+        <h2 id="ds-motion">Motion</h2>
+        <table class="wt">
+          <tr><th>Moment</th><th>What moves</th><th>Time</th></tr>
+          <tr><td>A constellation grows</td><td>Stars bloom outward from the centre, each thread drawing just before its star lands</td><td class="mono">1.4 s</td></tr>
+          <tr><td>Travel</td><td>The chosen star stays put and becomes the centre. A ring of light sweeps out from it: old stars dissolve ahead of the ring, new ones appear behind it. The old constellation shrinks and slides aside as a faint memory.</td><td class="mono">1.2 s</td></tr>
+          <tr><td>Idle</td><td>Stars twinkle out of step. Points of light run along threads toward the centre.</td><td class="mono">always</td></tr>
+          <tr><td>Logo</td><td>The star over the i makes a quarter turn</td><td class="mono">every 7 s</td></tr>
+        </table>
+        <p>Anyone with reduced motion turned on gets the finished picture with no growth, flight or twinkle.</p>
+      </section>
+    </main>
+
+    <footer class="vfoot">
+      <div>Astris is a mockup. Articles and links shown here are sample data. The finished site reads Wikipedia live; Wikipedia's text is available under the Creative Commons Attribution-ShareAlike 4.0 licence. Astris is not affiliated with or endorsed by the Wikimedia Foundation.</div>
+      <ul><li><a data-go="main-page">Main page</a></li><li><a data-go="play">Open the map</a></li><li><a data-go="design-system">Design system</a></li><li><a href="https://www.wikipedia.org/">Wikipedia</a></li></ul>
+    </footer>
+  </div>
+</div>
+
+<!-- ======================= THE GAME ======================= -->
+<div id="play">
+  <div class="neb"></div>
+  <div class="tint" id="tint"></div>
+  <canvas id="sky" aria-label="The Astris map. Drag to pan, scroll to zoom, click a star to travel to it."></canvas>
+  <div class="gbar">
+    <a class="logo" data-go="main-page" aria-label="Astris, back to the main page">Astr<span class="i">&#305;<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M30 0 Q33 27 60 30 Q33 33 30 60 Q27 33 0 30 Q27 27 30 0 Z" fill="url(#lgn)"/></svg></span>s</a>
+    <div class="gsearch"><input id="gq" type="text" placeholder="Search Wikipedia" aria-label="Search Wikipedia" autocomplete="off" spellcheck="false"><ul class="gsugg" id="gsugg" role="listbox"></ul></div>
+    <div class="modes" id="modes" role="group" aria-label="Mode">
+      <button type="button" data-mode="explore" aria-pressed="true">Explore</button><button type="button" data-mode="race" aria-pressed="false">Race</button>
+      <button type="button" data-mode="connect" aria-pressed="false">Connect two<sup>soon</sup></button><button type="button" data-mode="daily" aria-pressed="false">Daily<sup>soon</sup></button><button type="button" data-mode="drift" aria-pressed="false">Drift<sup>soon</sup></button>
+    </div>
+    <div class="right"><button class="gbtn" type="button" id="surprise">Random article</button><a class="lk" data-go="main-page">Main page</a></div>
+  </div>
+  <div class="gzoom card" role="group" aria-label="Zoom"><button type="button" id="zin" aria-label="Zoom in">+</button><button type="button" id="zout" aria-label="Zoom out">−</button><button type="button" id="zfit" aria-label="Centre the current article">◎</button></div>
+  <div id="hud" class="card" role="status"></div>
+  <aside id="panel" class="card" aria-live="polite"></aside>
+  <div id="legend" class="card"></div>
+  <div id="tip" class="card"></div>
+  <div id="toast" class="card" role="status"></div>
+  <div class="gfoot"><span>Click a star to travel · drag to pan · scroll to zoom · <span class="mono">/</span> to search</span><span class="mono" id="gstat"></span></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  /* ---------- sample data ---------- */
+  var CL = {
+    "Architecture": ["Brutalist architecture","Bauhaus","Gothic architecture","Modern architecture","Art Deco","Frank Lloyd Wright","Le Corbusier","Zaha Hadid","Skyscraper","Vernacular architecture","Arch bridge"],
+    "Urban planning": ["New Urbanism","Garden city movement","Zoning","Transit-oriented development","Jane Jacobs","Urban sprawl","Walkability","Greenbelt","Smart growth","Public space"],
+    "Civil engineering": ["Bridge","Dam","Reinforced concrete","Structural engineering","Geotechnical engineering","Tunnel","Surveying","Aqueduct","Suspension bridge","Retaining wall"],
+    "Sustainable design": ["Green roof","Passive house","Solar panel","Rainwater harvesting","Adaptive reuse","Urban heat island","Permeable paving","Biophilic design","Zero-energy building","Daylighting"],
+    "Astronomy": ["Black hole","Neutron star","Galaxy","Milky Way","Supernova","Exoplanet","Nebula","Dark matter","Big Bang","Solar System"],
+    "Music": ["Jazz","Blues","Synthesizer","Hip hop","Punk rock","Guitar","Drum machine","Shoegaze","Ambient music","Vinyl record"],
+    "Biology": ["Cell (biology)","DNA","Evolution","Photosynthesis","Mitochondrion","Ecosystem","Natural selection","Protein","Enzyme","Neuron"],
+    "Philosophy": ["Stoicism","Existentialism","Epistemology","Ethics","Plato","Aristotle","Nihilism","Utilitarianism","Metaphysics","Logic"],
+    "Computer science": ["Algorithm","Search engine","Trie","Hash table","Web crawler","Inverted index","Graph theory","PageRank","Autocomplete","Database"],
+    "History": ["Roman Empire","Renaissance","Industrial Revolution","Silk Road","Ancient Egypt","Byzantine Empire","Cold War","Printing press","Bronze Age","Library of Alexandria"],
+    "Geography": ["Pacific Ocean","Sierra Nevada","Mojave Desert","Amazon rainforest","Sahara","Himalayas","Nile","Tokyo","Paris","Antarctica"],
+    "Video game": ["City-building game","Procedural generation","Pixel art","Game engine","Roguelike","Level design","Sandbox game","Arcade game","Text-based game","ASCII art"]
+  };
+  var NB0 = { "Architecture": ["Urban planning","Civil engineering","Sustainable design","History"], "Urban planning": ["Architecture","Sustainable design","Geography","Civil engineering"], "Civil engineering": ["Architecture","Urban planning","Sustainable design"], "Sustainable design": ["Architecture","Urban planning","Biology"], "Astronomy": ["Philosophy","Computer science","History"], "Music": ["History","Computer science","Video game"], "Biology": ["Sustainable design","Philosophy","Astronomy"], "Philosophy": ["History","Biology","Computer science"], "Computer science": ["Video game","Philosophy","Music"], "History": ["Architecture","Philosophy","Geography"], "Geography": ["History","Urban planning","Biology"], "Video game": ["Computer science","Music","Urban planning"] };
+  var NB = {}; Object.keys(CL).forEach(function (c) { NB[c] = NB0[c].slice(); });
+  Object.keys(NB0).forEach(function (c) { NB0[c].forEach(function (d) { if (NB[d].indexOf(c) < 0) NB[d].push(c); }); });
+  var PROPER = {}; ("Bauhaus,Art Deco,Frank Lloyd Wright,Le Corbusier,Zaha Hadid,Jane Jacobs,New Urbanism,Milky Way,Big Bang,Solar System,DNA,Plato,Aristotle,PageRank,Roman Empire,Renaissance,Industrial Revolution,Silk Road,Ancient Egypt,Byzantine Empire,Cold War,Bronze Age,Library of Alexandria,Pacific Ocean,Sierra Nevada,Mojave Desert,Amazon rainforest,Sahara,Himalayas,Nile,Tokyo,Paris,Antarctica,ASCII art,Gothic architecture,Brutalist architecture").split(",").forEach(function (t) { PROPER[t] = 1; });
+  var PLACES = "Japan,France,Brazil,Egypt,India,Mexico,Italy,Germany,China,Canada,Spain,Kenya,Peru,Norway,Turkey,Greece".split(",");
+  var titles = [], clusterOf = {};
+  Object.keys(CL).forEach(function (c) { titles.push(c); clusterOf[c] = c; CL[c].forEach(function (t) { titles.push(t); clusterOf[t] = c; }); });
+  titles.sort(function (a, b) { return a.localeCompare(b); });
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function hash(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function plain(t) { return t.replace(/\s*\(.*\)$/, ""); }
+  function low(t) { t = plain(t); return PROPER[t] ? t : t.charAt(0).toLowerCase() + t.slice(1); }
+  /* real neighbours: what you can reach in one click on the sample graph */
+  function reach(t, c) { c = c || clusterOf[t]; return t === c ? CL[c].concat(NB[c]) : [c].concat(CL[c].filter(function (x) { return x !== t; })); }
+  function bfs(a, b) { var q = [a], d = {}; d[a] = 0; while (q.length) { var t = q.shift(); if (t === b) return d[t]; reach(t).forEach(function (n) { if (d[n] === undefined) { d[n] = d[t] + 1; q.push(n); } }); } return -1; }
+
+  /* every article near a search, with all its relations and one rank from 1 to 5 */
+  function stars(ce, N) {
+    var seen = {}, out = [], gen = [], w = plain(ce.t).split(" ")[0].toLowerCase(); seen[ce.t] = 1;
+    function put(t, c, kind, real) {
+      if (seen[t]) return; seen[t] = 1;
+      var h = hash(ce.t + "|" + t), a = h % 100, b = (h >>> 8) % 100, o = { t: t, c: c, real: real };
+      if (kind === "name") { o.name = true; o.out = a < 36; o.inn = b < 30; }
+      else if (kind === "own") { o.out = true; o.inn = b < 74; }
+      else { o.out = a < 60; o.inn = b < 32; if (!o.out && !o.inn) o.out = true; }
+      if (!o.name && w.length > 3 && t.toLowerCase().indexOf(w) >= 0) o.name = true;
+      o.L = o.out && o.inn && o.name ? 1 : o.out && o.inn ? 2 : (o.out || o.inn) && o.name ? 3 : (o.out || o.inn) ? 4 : 5;
+      o.s = (6 - o.L) * 10 + (real ? 5 : 0) + (h % 1000) / 170; out.push(o);
+    }
+    reach(ce.t, ce.c).forEach(function (t) { put(t, clusterOf[t], "own", true); });
+    var b = plain(ce.t), l = low(ce.t);
+    var names = clusterOf[ce.t] ? ["History of " + l, "Outline of " + l, b + " (disambiguation)", "Timeline of " + l, "Glossary of " + l, b + " theory", "Philosophy of " + l, b + " in the 20th century"].concat(PLACES.slice(0, 9).map(function (p) { return b + " in " + p; })) : [b + " (disambiguation)"];
+    names.forEach(function (t) { put(t, ce.c, "name", false); });
+    [ce.c].concat(NB[ce.c]).forEach(function (c) { [c].concat(CL[c]).forEach(function (x) { if (x === ce.t) return; gen.push(["History of " + low(x), c]); if (!PROPER[plain(x)]) PLACES.forEach(function (p) { gen.push([plain(x) + " in " + p, c]); }); }); });
+    gen.sort(function (p, q) { return hash(ce.t + p[0]) - hash(ce.t + q[0]); });
+    for (var i = 0; i < gen.length && out.length < N; i++) put(gen[i][0], gen[i][1], "gen", false);
+    return out.sort(function (p, q) { return q.s - p.s; });
+  }
+
+  /* ---------- light: pre-rendered glow sprites, drawn additively ---------- */
+  /* colour is the subject of the article; size, brightness and distance are its rank */
+  var TOPIC = { "Architecture": "255,190,120", "Urban planning": "176,226,110", "Civil engineering": "110,163,255", "Sustainable design": "96,220,160", "Astronomy": "164,139,245", "Music": "240,138,169", "Biology": "84,214,208", "Philosophy": "201,168,255", "Computer science": "98,200,255", "History": "255,224,110", "Geography": "130,214,180", "Video game": "232,121,216" };
+  var SIZE = [0, 15, 11.5, 9, 6.2, 5.4], LA = [0, 1, .96, .86, .72, .6], TA = [0, .5, .36, .28, .15, .11], BAND = [null, [72, 112], [112, 184], [184, 228], [228, 330], [330, 368]], RMAX = 368;
+  function sprite(rgb, core) {
+    var c = document.createElement("canvas"); c.width = c.height = 64; var x = c.getContext("2d"), g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, "rgba(255,255,255," + core + ")"); g.addColorStop(0.1, "rgba(" + rgb + ",.95)"); g.addColorStop(0.3, "rgba(" + rgb + ",.32)"); g.addColorStop(1, "rgba(" + rgb + ",0)");
+    x.fillStyle = g; x.fillRect(0, 0, 64, 64); return c;
+  }
+  function starSprite(rgb) {
+    var c = document.createElement("canvas"); c.width = c.height = 128; var x = c.getContext("2d"); x.translate(64, 64);
+    var g = x.createRadialGradient(0, 0, 0, 0, 0, 62); g.addColorStop(0, "rgba(" + rgb + ",.6)"); g.addColorStop(1, "rgba(" + rgb + ",0)"); x.fillStyle = g; x.fillRect(-64, -64, 128, 128);
+    var s = x.createRadialGradient(0, 0, 0, 0, 0, 44); s.addColorStop(0, "#fff"); s.addColorStop(0.35, "rgba(255,255,255,.92)"); s.addColorStop(1, "rgb(" + rgb + ")"); x.fillStyle = s;
+    x.beginPath(); x.moveTo(0, -44); x.quadraticCurveTo(4.4, -4.4, 44, 0); x.quadraticCurveTo(4.4, 4.4, 0, 44); x.quadraticCurveTo(-4.4, 4.4, -44, 0); x.quadraticCurveTo(-4.4, -4.4, 0, -44); x.fill(); return c;
+  }
+  var SPT = {}, STT = {}; Object.keys(TOPIC).forEach(function (c) { SPT[c] = sprite(TOPIC[c], 0.9); STT[c] = starSprite(TOPIC[c]); });
+  var SPW = sprite("255,255,255", 1), SPV = sprite("192,168,247", 0.8);
+  var DUST = (function () { var c = document.createElement("canvas"); c.width = c.height = 512; var x = c.getContext("2d"), s = 7;
+    for (var i = 0; i < 150; i++) { s = (s * 16807) % 2147483647; var px = s % 512; s = (s * 16807) % 2147483647; var py = s % 512; s = (s * 16807) % 2147483647; var a = 0.12 + (s % 100) / 220, r = (s % 7) === 0 ? 1.3 : 0.7;
+      x.fillStyle = "rgba(" + (i % 5 === 0 ? "200,190,255" : "220,230,255") + "," + a + ")"; x.beginPath(); x.arc(px, py, r, 0, 6.3); x.fill(); } return c; })();
+  var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function ease(x) { return x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.pow(1 - x, 3); }
+  function spring(x) { if (x <= 0) return 0; if (x >= 1) return 1; var c = 1.9; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); }
+
+  /* a constellation: stars grouped into one wedge per subject, ranked outward, with a slight spiral */
+  function makeCon(ce, x, y, now, N, delay) {
+    var list = stars(ce, N), by = {}, order = [], nodes = [], groups = {};
+    list.forEach(function (o) { if (!by[o.c]) { by[o.c] = [0, [], [], [], [], []]; order.push(o.c); } by[o.c][o.L].push(o); by[o.c][0]++; });
+    order.sort(function (a, b) { return (b === ce.c) - (a === ce.c) || by[b][0] - by[a][0]; });
+    var a0 = (hash(ce.t) % 628) / 100, tot = list.length;
+    order.forEach(function (c) {
+      var span = Math.PI * 2 * by[c][0] / tot;
+      for (var L = 1; L <= 5; L++) by[c][L].forEach(function (o, j, arr) {
+        var b = BAND[L], r = Math.sqrt(b[0] * b[0] + (j + 0.5) / arr.length * (b[1] * b[1] - b[0] * b[0])), a = a0 + span * (0.06 + 0.88 * ((j * 0.618034 + L * 0.37) % 1)) + r * 0.0021;
+        o.r = r; o.dx = Math.cos(a) * r; o.dy = Math.sin(a) * r; o.ph = (hash(o.t) % 628) / 100; o.sp = 0.6 + (hash(o.t) % 90) / 100;
+        o.born = now + delay + 120 + (r / RMAX) * 1050 + (hash(o.t) % 110); nodes.push(o);
+        (groups[c + "|" + L] = groups[c + "|" + L] || { c: c, L: L, n: [] }).n.push(o);
+      });
+      a0 += span;
+    });
+    nodes.sort(function (p, q) { return p.r - q.r; });
+    nodes.forEach(function (o, i) {            // each star hangs from the nearest star closer to the centre
+      var best = null, bd = 1e9; for (var j = 0; j < i; j++) { var p = nodes[j], d = (p.dx - o.dx) * (p.dx - o.dx) + (p.dy - o.dy) * (p.dy - o.dy); if (d < bd) { bd = d; best = p; } }
+      o.par = (o.r < 128 || !best || bd > 150 * 150) ? null : best; o.bend = (hash(o.t) % 2 ? 1 : -1) * 0.14;
+    });
+    return { t: ce.t, c: ce.c, x: x, y: y, sc: 1, born: now + delay, nodes: nodes, groups: Object.keys(groups).map(function (k) { return groups[k]; }), topics: order, counts: by, dim: 1, dimT: 1, pulses: [], ghost: null };
+  }
+
+  /* draw one constellation into any 2D context */
+  function drawCon(ctx, con, cam, now, w, h, opt) {
+    var z = cam.z, S = z * con.sc, cx = w / 2 + (con.x - cam.x) * z, cy = h / 2 + (con.y - cam.y) * z, i, o, g = con.ghost;
+    var zs = Math.max(0.55, Math.min(2.2, Math.sqrt(S))), gfade = g ? 1 - ease((now - g.t0) / 420) : 1;
+    con.cx = cx; con.cy = cy;
+    if (con.dim < 0.015 && gfade <= 0) return 0;
+    ctx.globalCompositeOperation = "lighter"; ctx.lineWidth = 1;
+    // the bloom: one ring of light sweeps outward and the new stars appear behind it
+    if (!g && !reduce) { var u = (now - con.born) / 1150; if (u > 0 && u < 1) { var rr = RMAX * ease(u) * S;
+      ctx.strokeStyle = "rgba(" + TOPIC[con.c] + "," + ((1 - u) * 0.55) + ")"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, rr, 0, 6.2832); ctx.stroke();
+      ctx.strokeStyle = "rgba(" + TOPIC[con.c] + "," + ((1 - u) * 0.07) + ")"; ctx.lineWidth = 22 * zs; ctx.beginPath(); ctx.arc(cx, cy, Math.max(0, rr - 11 * zs), 0, 6.2832); ctx.stroke(); ctx.lineWidth = 1; } }
+    // threads, batched by subject and rank
+    for (var gi = 0; gi < con.groups.length; gi++) {
+      var G = con.groups[gi], ta = TA[G.L] * (g ? (G.L <= 2 ? con.dim : gfade) : con.dim); if (ta < 0.008) continue;
+      ctx.strokeStyle = "rgba(" + TOPIC[G.c] + "," + ta + ")"; ctx.beginPath();
+      for (i = 0; i < G.n.length; i++) {
+        o = G.n[i]; var p = reduce ? 1 : ease((now - (o.born - 340)) / 340); if (p <= 0) continue;
+        var ax = o.par ? cx + o.par.dx * S : cx, ay = o.par ? cy + o.par.dy * S : cy, bx = cx + o.dx * S, by = cy + o.dy * S;
+        if ((ax < 0 && bx < 0) || (ax > w && bx > w) || (ay < 0 && by < 0) || (ay > h && by > h)) continue;
+        var mx = (ax + bx) / 2 - (by - ay) * o.bend, my = (ay + by) / 2 + (bx - ax) * o.bend;
+        var qx = ax + (mx - ax) * p, qy = ay + (my - ay) * p, ex = qx + ((mx + (bx - mx) * p) - qx) * p, ey = qy + ((my + (by - my) * p) - qy) * p;
+        ctx.moveTo(ax, ay); ctx.quadraticCurveTo(qx, qy, ex, ey);
+      }
+      ctx.stroke();
+    }
+    var shownN = 0;
+    for (i = 0; i < con.nodes.length; i++) {
+      o = con.nodes[i]; var s = reduce ? 1 : spring((now - o.born) / 420), al = con.dim, sx = cx + o.dx * S, sy = cy + o.dy * S;
+      if (g) {                                   // dissolving: far stars blow outward and fade, the closest few stay as a faint memory
+        if (o.L > 2) { var du = reduce ? 1 : ease((now - (g.t0 + o.gd)) / 430); al = 1 - du; if (al <= 0.01) { o.a = 0; o.on = false; continue; } sx += o.gux * du * 34 * z; sy += o.guy * du * 34 * z; s *= 1 - du * 0.5; }
+      }
+      o.a = s; if (s <= 0) { o.on = false; continue; } shownN++; o.sx = sx; o.sy = sy;
+      if (sx < -30 || sy < -30 || sx > w + 30 || sy > h + 30) { o.on = false; continue; } o.on = true;
+      var tw = reduce ? 1 : 1 + Math.sin(now * 0.001 * o.sp * 2.2 + o.ph) * 0.16, d = SIZE[o.L] * zs * s * tw * 2.1;
+      ctx.globalAlpha = al * LA[o.L] * Math.min(1, s); ctx.drawImage(SPT[o.c] || SPW, sx - d, sy - d, d * 2, d * 2);
+      if (o.L === 1) { var d1 = d * 0.5; ctx.drawImage(SPW, sx - d1, sy - d1, d1 * 2, d1 * 2); }
+    }
+    // points of light running inward along threads
+    if (!reduce && opt.pulses && !g) {
+      if (con.pulses.length < opt.pulses) con.pulses.push({ n: null, t0: now + con.pulses.length * 240 });
+      con.pulses.forEach(function (pu) {
+        var u = (now - pu.t0) / 1500; if (u < 0) return;
+        if (u >= 1 || !pu.n || !pu.n.a) { pu.n = con.nodes[Math.floor(Math.random() * Math.min(con.nodes.length, 90))]; pu.t0 = now + Math.random() * 900; return; }
+        var n = pu.n, ax = n.par ? n.par.dx : 0, ay = n.par ? n.par.dy : 0, e = 1 - u, mx = (ax + n.dx) / 2 - (n.dy - ay) * n.bend, my = (ay + n.dy) / 2 + (n.dx - ax) * n.bend;
+        var X = e * e * n.dx + 2 * e * u * mx + u * u * ax, Y = e * e * n.dy + 2 * e * u * my + u * u * ay, d2 = 5 * zs;
+        ctx.globalAlpha = Math.sin(u * Math.PI) * 0.9; ctx.drawImage(SPW, cx + X * S - d2, cy + Y * S - d2, d2 * 2, d2 * 2);
+      });
+    }
+    // centre star, tinted by its subject
+    var cs = reduce ? 1 : spring((now - con.born) / 520), cd = (opt.mini ? 20 : 30) * zs * (0.35 + 0.65 * cs) * (reduce ? 1 : 1 + Math.sin(now * 0.0016) * 0.05);
+    ctx.globalAlpha = Math.min(1, con.dim + (g ? 0.25 : 0)); ctx.drawImage(STT[con.c] || STT.Astronomy, cx - cd, cy - cd, cd * 2, cd * 2);
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
+    con.count = shownN; return shownN;
+  }
+
+  /* ======================= site ======================= */
+  var body = document.body, $ = function (id) { return document.getElementById(id); };
+  var PAGES = { "main-page": 1, "design-system": 1 };
+  function routeTo(name) {
+    var view = name === "play" ? "play" : "site", page = PAGES[name] ? name : "main-page", was = body.dataset.view;
+    body.dataset.view = view;
+    if (view === "site") { Object.keys(PAGES).forEach(function (p) { $("page-" + p).classList.toggle("on", p === page); var t = $("tab-" + p); if (p === page) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current"); }); window.scrollTo(0, 0); stopGame(); }
+    else if (was !== "play" || !running) startGame();
+    miniTick();
+  }
+  function route() { routeTo((location.hash || "").replace("#", "")); }
+  function go(name) { routeTo(name); try { if (location.hash !== "#" + name) location.hash = name; } catch (e) {} }
+  window.addEventListener("hashchange", route);
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest("[data-go],[data-race],[data-random],[data-topic],[data-scroll]"); if (!a) return;
+    if (a.dataset.scroll) { var el = $(a.dataset.scroll); if (el) el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" }); return; }
+    e.preventDefault();
+    if (a.dataset.go) { go(a.dataset.go); return; }
+    go("play");
+    if (a.dataset.race) setTimeout(function () { startRace("Brutalist architecture", "Jazz"); }, 30);
+    else if (a.dataset.random) setTimeout(surprise, 30);
+    else if (a.dataset.topic) setTimeout(function () { setMode("explore"); reset({ t: a.dataset.topic, c: clusterOf[a.dataset.topic] }); }, 30);
+  });
+  $("menuBtn").addEventListener("click", function () { $("vside").classList.toggle("open"); });
+  $("vsearch").addEventListener("submit", function (e) { e.preventDefault(); var q = $("vq").value.trim().toLowerCase(), m = titles.filter(function (t) { return t.toLowerCase().indexOf(q) === 0; })[0] || titles.filter(function (t) { return t.toLowerCase().indexOf(q) >= 0; })[0];
+    go("play"); setTimeout(function () { setMode("explore"); if (q && m) reset({ t: m, c: clusterOf[m] }); else if (q) toast("No article called “" + $("vq").value.trim() + "” in the sample set."); }, 30); });
+  var tk = Object.keys(TOPIC).map(function (c) { return "<span style='white-space:nowrap'><i class='dot' style='--c:rgb(" + TOPIC[c] + ");display:inline-block;vertical-align:middle;width:9px;height:9px;box-shadow:0 0 0 4px var(--night),0 0 7px 4px rgb(" + TOPIC[c] + ")'></i>&nbsp;&nbsp;" + esc(c) + "</span>"; }).join(" &nbsp; ");
+  $("topicKey").innerHTML = tk; $("topicDots").innerHTML = Object.keys(TOPIC).map(function (c) { return "<span class='dot' title='" + esc(c) + "' style='--c:rgb(" + TOPIC[c] + ")'></span>"; }).join("");
+  $("parText").textContent = "Par for this pair is " + bfs("Brutalist architecture", "Jazz") + " clicks.";
+
+  /* mini constellation on the main page */
+  var mini = $("mini"), mctx = mini.getContext("2d"), mcon = null, mraf = 0;
+  function miniTick() {
+    cancelAnimationFrame(mraf);
+    if (body.dataset.view !== "site" || !$("page-main-page").classList.contains("on")) return;
+    var r = mini.getBoundingClientRect(), d = Math.min(2, window.devicePixelRatio || 1); if (!r.width) return;
+    if (mini.width !== Math.round(r.width * d)) { mini.width = Math.round(r.width * d); mini.height = Math.round(r.height * d); }
+    var now = performance.now(); if (!mcon) mcon = makeCon({ t: "Architecture", c: "Architecture" }, 0, 0, now, 70, 200);
+    mctx.setTransform(d, 0, 0, d, 0, 0); mctx.clearRect(0, 0, r.width, r.height);
+    drawCon(mctx, mcon, { x: 0, y: 0, z: Math.min(r.width, r.height * 1.5) / 760 }, now, r.width, r.height, { pulses: 5, mini: true });
+    mctx.font = "600 15px Georgia, serif"; mctx.textAlign = "center"; mctx.fillStyle = "#eceaf2"; mctx.fillText("Architecture", r.width / 2, r.height / 2 + 34);
+    if (!reduce) mraf = requestAnimationFrame(miniTick);
+  }
+
+  /* ======================= game ======================= */
+  var sky = $("sky"), ctx = sky.getContext("2d"), cons = [], cur = null, cam = { x: 0, y: 0, z: 1 }, tgt = { x: 0, y: 0, z: 1 }, raf = 0, running = false, last = 0;
+  var visited = {}, trail = [], hover = null, mode = "explore", race = null, W = 0, H = 0, seenCount = 0, discovered = {};
+  function fitZ() { var pw = W > 900 ? 350 : 0; return Math.max(0.45, Math.min(1.25, Math.min(W - pw - 60, H - 150) / 800)); }
+  function focusOffset() { return W > 900 ? 168 / tgt.z : 0; }
+  function resize() { var r = sky.getBoundingClientRect(), d = Math.min(2, window.devicePixelRatio || 1); W = r.width; H = r.height; sky.width = Math.round(W * d); sky.height = Math.round(H * d); ctx.setTransform(d, 0, 0, d, 0, 0); }
+  function theme() { $("tint").style.color = "rgb(" + TOPIC[cur.c] + ")"; legend(); }
+  function reset(ce) {
+    var now = performance.now(); cons = [makeCon(ce, 0, 0, now, 120, 0)]; cur = cons[0]; trail = [ce.t]; visited = {}; discovered = {}; note(cur);
+    tgt.z = fitZ(); tgt.x = focusOffset(); tgt.y = 0; cam.x = tgt.x; cam.y = tgt.y; cam.z = tgt.z * 0.82; theme(); panel(); kick();
+  }
+  function note(con) { discovered[con.t] = 1; con.nodes.forEach(function (n) { discovered[n.t] = 1; }); seenCount = Object.keys(discovered).length; }
+
+  /* Travel: the chosen star stays exactly where it is and becomes the new centre.
+     Everything else dissolves outward from it. The old constellation shrinks, slides out of the way and stays behind as a faint memory. */
+  function travel(o) {
+    if (!cur || o.t === cur.t) return;
+    var now = performance.now(), from = cur, wx, wy;
+    if (o.dx !== undefined) { wx = cur.x + o.dx * cur.sc; wy = cur.y + o.dy * cur.sc; } else if (o.x !== undefined) { wx = o.x; wy = o.y; } else { wx = cur.x; wy = cur.y; }
+    visited[cur.t] = 1;
+    cons.forEach(function (c) {
+      if (c.gone) return;
+      if (c.t === o.t) { c.dimT = 0; c.gone = true; return; }
+      var dx = c.x - wx, dy = c.y - wy, d = Math.hypot(dx, dy), a = d < 1 ? (hash(c.t + o.t) % 628) / 100 : Math.atan2(dy, dx), far = Math.max(d, 610);
+      c.gm = { t0: now, x0: c.x, y0: c.y, x1: wx + Math.cos(a) * far, y1: wy + Math.sin(a) * far, s0: c.sc, s1: c === from ? 0.46 : c.sc * 0.86 };
+      if (!c.ghost) {
+        c.ghost = { t0: now }; c.dimT = 0.3; c.pulses = [];
+        c.nodes.forEach(function (n) { var nx = c.x + n.dx * c.sc - wx, ny = c.y + n.dy * c.sc - wy, nd = Math.hypot(nx, ny) || 1; n.gd = Math.min(1, nd / 520) * 460; n.gux = nx / nd; n.guy = ny / nd; });
+      } else c.dimT *= 0.55;
+    });
+    var ghosts = cons.filter(function (c) { return c.ghost && !c.gone; }); while (ghosts.length > 3) { var old = ghosts.shift(); old.dimT = 0; old.gone = true; }
+    var con = makeCon({ t: o.t, c: o.c }, wx, wy, now, 120, 0); cons.push(con);
+    cur = con; trail.push(o.t); if (trail.length > 14) trail.shift(); note(con);
+    tgt.z = fitZ(); tgt.x = wx + focusOffset(); tgt.y = wy; hover = null; $("tip").style.display = "none";
+    if (race && !race.done) { race.clicks++; if (o.t === race.target) { race.done = true; race.time = now - race.t0; } hud(); }
+    theme(); panel(); kick();
+  }
+  function frame(now) {
+    if (!running) return;
+    var dt = Math.min(64, now - (last || now)); last = now; var k = reduce ? 1 : 1 - Math.exp(-dt * 0.0052);
+    cam.x += (tgt.x - cam.x) * k; cam.y += (tgt.y - cam.y) * k; cam.z += (tgt.z - cam.z) * k;
+    ctx.clearRect(0, 0, W, H);
+    var px = -((cam.x * 0.12) % 512), py = -((cam.y * 0.12) % 512); ctx.globalAlpha = 0.9;
+    for (var gx = px - 512; gx < W; gx += 512) for (var gy = py - 512; gy < H; gy += 512) ctx.drawImage(DUST, gx, gy);
+    ctx.globalAlpha = 1;
+    // memories slide away and shrink
+    cons.forEach(function (c) { c.dim += (c.dimT - c.dim) * k; if (c.gm) { var p = reduce ? 1 : ease((now - c.gm.t0) / 1150), e = p * p * (3 - 2 * p); c.x = c.gm.x0 + (c.gm.x1 - c.gm.x0) * e; c.y = c.gm.y0 + (c.gm.y1 - c.gm.y0) * e; c.sc = c.gm.s0 + (c.gm.s1 - c.gm.s0) * e; if (p >= 1) c.gm = null; } });
+    cons = cons.filter(function (c) { return !(c.gone && c.dim < 0.02); });
+    var total = 0, live = cons.filter(function (c) { return !c.gone; });
+    live.forEach(function (c) { if (c !== cur) total += drawCon(ctx, c, cam, now, W, H, { pulses: 0 }); });
+    // the trail you left, from memory to memory to here
+    ctx.globalCompositeOperation = "lighter"; ctx.lineWidth = 1.5; ctx.setLineDash([2, 7]);
+    for (var i = 1; i < live.length; i++) { var A = live[i - 1], B = live[i]; ctx.strokeStyle = "rgba(192,168,247," + Math.min(.55, A.dim + .2) + ")"; ctx.beginPath(); ctx.moveTo(A.cx, A.cy); ctx.lineTo(W / 2 + (B.x - cam.x) * cam.z, H / 2 + (B.y - cam.y) * cam.z); ctx.stroke(); }
+    ctx.setLineDash([]); ctx.lineWidth = 1; ctx.globalCompositeOperation = "source-over";
+    if (cur) total += drawCon(ctx, cur, cam, now, W, H, { pulses: 12 });
+    // race target marker
+    if (race && !race.done && cur) cur.nodes.forEach(function (n) { if (n.t === race.target && n.a > 0.5 && n.on) { var rr = 13 + (reduce ? 0 : Math.sin(now * 0.005) * 3); ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.6; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.arc(n.sx, n.sy, rr, 0, 6.3); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1; } });
+    // titles
+    var boxes = [], placed = 0; ctx.textAlign = "center";
+    live.forEach(function (c) { var on = c === cur, zz = Math.max(0.55, Math.min(2.2, Math.sqrt(cam.z * c.sc))); ctx.font = (on ? "600 21px " : "400 14px ") + "'Linux Libertine', Georgia, serif";
+      ctx.fillStyle = on ? "#f6f4fb" : "rgba(192,168,247," + Math.min(.9, c.dim + .35) + ")"; if (on) ctx.globalAlpha = reduce ? 1 : ease((now - c.born) / 500);
+      var y = c.cy + (on ? 46 : 26) * zz; ctx.fillText(c.t, c.cx, y); ctx.globalAlpha = 1; var tw = ctx.measureText(c.t).width; boxes.push([c.cx - tw / 2 - 4, y - 18, tw + 8, 24]); });
+    ctx.textAlign = "left";
+    if (cur) for (var j0 = 0; j0 < cur.nodes.length && placed < 46; j0++) {
+      var n = cur.nodes[j0]; if (!n.on || n.a < 0.9 || n === hover) continue; var big = n.L <= 2;
+      if (!big && cam.z < 1.15 && n.L > 3) continue;
+      ctx.font = big ? "14px 'Linux Libertine', Georgia, serif" : "11.5px -apple-system, 'Segoe UI', Roboto, Arial, sans-serif";
+      var key = big ? "wb" : "ws"; if (n[key] === undefined) n[key] = ctx.measureText(n.t).width;
+      var bx = n.sx + SIZE[n.L] * 0.9 + 5, by = n.sy - 8, bw = n[key], hit = false; if (bx + bw > W - 6) continue;
+      for (var j = 0; j < boxes.length; j++) { var b = boxes[j]; if (!(bx > b[0] + b[2] + 4 || bx + bw + 4 < b[0] || by > b[1] + b[3] || by + 15 < b[1])) { hit = true; break; } }
+      if (hit) continue; boxes.push([bx, by, bw, 15]); placed++;
+      ctx.fillStyle = visited[n.t] ? "rgba(192,168,247,.95)" : big ? "rgba(236,238,248,.96)" : "rgba(168,172,194,.85)"; ctx.fillText(n.t, bx, n.sy + 4);
+    }
+    if (hover && hover.on) { ctx.strokeStyle = "rgba(255,255,255,.8)"; ctx.beginPath(); ctx.arc(hover.sx, hover.sy, SIZE[hover.L] + 6, 0, 6.3); ctx.stroke(); }
+    $("gstat").textContent = total + " stars · " + (live.length - 1) + (live.length === 2 ? " memory" : " memories") + " · " + seenCount + " articles discovered · sample data";
+    if (race && !race.done) hudTime(now);
+    var settled = Math.abs(tgt.x - cam.x) + Math.abs(tgt.y - cam.y) < 0.05 && Math.abs(tgt.z - cam.z) < 0.0005;
+    if (reduce && settled && !cons.some(function (c) { return c.gm || Math.abs(c.dim - c.dimT) > 0.01; })) { running = false; return; }
+    raf = requestAnimationFrame(frame);
+  }
+  function kick() { if (body.dataset.view !== "play") return; if (!running) { running = true; last = 0; raf = requestAnimationFrame(frame); } }
+  function startGame() { resize(); if (!cur) reset({ t: "Architecture", c: "Architecture" }); else { tgt.z = fitZ(); kick(); } }
+  function stopGame() { running = false; cancelAnimationFrame(raf); }
+  document.addEventListener("visibilitychange", function () { if (document.hidden) stopGame(); else if (body.dataset.view === "play") kick(); else miniTick(); });
+  window.addEventListener("resize", function () { if (body.dataset.view === "play") { resize(); kick(); } });
+
+  /* pointer */
+  var ptrs = {}, moved = 0, lastP = null, pinch = 0;
+  function at(e) { var r = sky.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  function pick(p) {
+    var best = null, bd = 15 * 15; if (!cur) return null;
+    cur.nodes.forEach(function (n) { if (!n.on || n.a < 0.5) return; var d = (n.sx - p.x) * (n.sx - p.x) + (n.sy - p.y) * (n.sy - p.y); if (d < bd) { bd = d; best = n; } });
+    if (!best) cons.forEach(function (c) { if (c !== cur && !c.gone && Math.hypot(c.cx - p.x, c.cy - p.y) < 24) best = c; });
+    return best;
+  }
+  function zoomAt(p, f) { var nz = Math.max(0.3, Math.min(3.2, tgt.z * f)), wx = cam.x + (p.x - W / 2) / cam.z, wy = cam.y + (p.y - H / 2) / cam.z; tgt.x = wx - (p.x - W / 2) / nz; tgt.y = wy - (p.y - H / 2) / nz; tgt.z = nz; kick(); }
+  sky.addEventListener("pointerdown", function (e) { sky.setPointerCapture(e.pointerId); ptrs[e.pointerId] = at(e); moved = 0; lastP = at(e); pinch = 0; sky.classList.add("drag"); });
+  sky.addEventListener("pointermove", function (e) {
+    var p = at(e), ids = Object.keys(ptrs);
+    if (!ptrs[e.pointerId]) { var o = pick(p); sky.style.cursor = o ? "pointer" : ""; hover = o && o.L ? o : null; tip(o, p); return; }
+    ptrs[e.pointerId] = p;
+    if (ids.length === 2) { var A = ptrs[ids[0]], B = ptrs[ids[1]], dd = Math.hypot(A.x - B.x, A.y - B.y); if (pinch) zoomAt({ x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, dd / pinch); pinch = dd; moved = 99; return; }
+    var dx = (p.x - lastP.x) / cam.z, dy = (p.y - lastP.y) / cam.z; tgt.x -= dx; tgt.y -= dy; cam.x -= dx; cam.y -= dy; moved += Math.abs(p.x - lastP.x) + Math.abs(p.y - lastP.y); lastP = p; kick();
+  });
+  function up(e) {
+    var had = ptrs[e.pointerId]; delete ptrs[e.pointerId]; pinch = 0; sky.classList.remove("drag");
+    if (had && moved < 5 && e.type === "pointerup") { var o = pick(at(e)); if (o && o.L) travel(o); else if (o) travel({ t: o.t, c: o.c, x: o.x, y: o.y }); }
+    var ids = Object.keys(ptrs); if (ids.length) lastP = ptrs[ids[0]];
+  }
+  sky.addEventListener("pointerup", up); sky.addEventListener("pointercancel", up);
+  sky.addEventListener("pointerleave", function () { hover = null; $("tip").style.display = "none"; });
+  sky.addEventListener("wheel", function (e) { e.preventDefault(); zoomAt(at(e), Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  $("zin").addEventListener("click", function () { zoomAt({ x: W / 2, y: H / 2 }, 1.4); }); $("zout").addEventListener("click", function () { zoomAt({ x: W / 2, y: H / 2 }, 1 / 1.4); });
+  $("zfit").addEventListener("click", function () { if (cur) { tgt.z = fitZ(); tgt.x = cur.x + focusOffset(); tgt.y = cur.y; kick(); } });
+  function rel(o) { var a = []; if (o.out) a.push("links out"); if (o.inn) a.push("links in"); if (o.name) a.push("similar name"); return a.join(" · "); }
+  function sw(c, px) { return "<i class='dot' style='--c:rgb(" + TOPIC[c] + ");display:inline-block;vertical-align:middle;width:" + (px || 9) + "px;height:" + (px || 9) + "px'></i>"; }
+  function tip(o, p) {
+    var el = $("tip"); if (!o) { el.style.display = "none"; return; }
+    el.innerHTML = o.L ? "<b>" + esc(o.t) + "</b><span>" + sw(o.c) + " " + esc(o.c) + " · rank " + o.L + "<br>" + rel(o) + (race && !race.done && o.t === race.target ? " · <b style='display:inline;font-size:inherit;font-family:inherit;color:#fff'>your target</b>" : "") + "</span>" : "<b>" + esc(o.t) + "</b><span>" + sw(o.c) + " a constellation you left · click to return</span>";
+    el.style.display = "block"; el.style.left = Math.min(p.x + 16, W - 290) + "px"; el.style.top = Math.min(p.y + 14, H - 90) + "px";
+  }
+  function legend() {
+    $("legend").innerHTML = "<b>Subjects here</b>" + cur.topics.map(function (c) { return "<div>" + sw(c) + "<span>" + esc(c) + " <span style='color:var(--muted)'>" + cur.counts[c][0] + "</span></span></div>"; }).join("") +
+      "<b style='margin-top:8px'>Rank</b><div style='grid-template-columns:auto 1fr'><span style='display:flex;gap:5px;align-items:center'><i class='dot' style='--c:#fff;width:11px;height:11px'></i><i class='dot' style='--c:#dfe4f5;width:8px;height:8px'></i><i class='dot' style='--c:#aab1cc;width:5px;height:5px'></i></span><span>bigger, brighter, closer</span></div>";
+  }
+
+  /* panel: the article, in encyclopedia dress */
+  function lk(o) { return '<button type="button" class="lk" data-t="' + esc(o.t) + '"' + (visited[o.t] ? ' style="color:var(--visited)"' : '') + '>' + esc(o.t) + '</button>'; }
+  function panel() {
+    var cnt = [0, 0, 0, 0, 0, 0]; cur.nodes.forEach(function (n) { cnt[n.L]++; });
+    var top = cur.nodes.slice().sort(function (a, b) { return b.s - a.s; }).slice(0, 9), real = !!clusterOf[cur.t];
+    $("panel").innerHTML = "<h1>" + esc(cur.t) + "</h1><div class='sub'>Sample entry. The finished site shows the Wikipedia article here.</div>" +
+      "<div class='ib'><b>Subject</b><span>" + sw(cur.c) + " " + esc(cur.c) + "</span><b>Stars</b><span class='mono'>" + cur.nodes.length + "</span><b>Rank 1 to 2</b><span class='mono'>" + (cnt[1] + cnt[2]) + " close ties</span><b>Rank 3 to 5</b><span class='mono'>" + (cnt[3] + cnt[4] + cnt[5]) + " loose ties</span></div>" +
+      "<p><b>" + esc(cur.t) + "</b> is the article at the centre of this constellation" + (real ? "" : ", a generated title used to fill out the sample map") + ". Stars nearer the centre are tied to it in more ways. Each colour is a subject.</p>" +
+      "<h2>Closest stars</h2><ul>" + top.map(function (o) { return "<li>" + sw(o.c, 8) + " " + lk(o) + " <small>" + rel(o) + "</small></li>"; }).join("") + "</ul>" +
+      "<h2>Your path</h2><ol>" + trail.map(function (t) { return "<li>" + esc(t) + "</li>"; }).join("") + "</ol>";
+    $("panel").scrollTop = 0;
+  }
+  $("panel").addEventListener("click", function (e) { var b = e.target.closest("[data-t]"); if (!b) return; var n = cur.nodes.filter(function (x) { return x.t === b.dataset.t; })[0]; if (n) travel(n); });
+
+  /* search */
+  var gq = $("gq"), gs = $("gsugg"), found = [], sel = 0;
+  function matches(q) { q = q.trim().toLowerCase(); if (!q) return []; var a = [], b = []; titles.forEach(function (t) { var l = t.toLowerCase(); if (l.indexOf(q) === 0) a.push(t); else if (l.split(/[\s(-]+/).some(function (w) { return w.indexOf(q) === 0; })) b.push(t); }); return a.concat(b).slice(0, 7); }
+  function sugg() {
+    var q = gq.value.trim(); found = matches(q); if (!q) { gs.classList.remove("open"); return; } gs.classList.add("open");
+    if (!found.length) { gs.innerHTML = "<li style='color:#ff7b6e;cursor:default'>" + esc(q) + "<span>no such article in the sample set</span></li>"; return; }
+    if (sel >= found.length) sel = 0;
+    gs.innerHTML = found.map(function (t, i) { var k = t.toLowerCase().indexOf(q.toLowerCase()), h = k >= 0 ? esc(t.slice(0, k)) + "<mark>" + esc(t.slice(k, k + q.length)) + "</mark>" + esc(t.slice(k + q.length)) : esc(t); return "<li role='option' data-i='" + i + "' class='" + (i === sel ? "on" : "") + "'>" + h + "<span>" + esc(t === clusterOf[t] ? "subject" : clusterOf[t]) + "</span></li>"; }).join("");
+  }
+  function choose(t) { gq.value = ""; sugg(); gq.blur(); if (!cur) return; var on = cur.nodes.filter(function (n) { return n.t === t; })[0]; var gh = cons.filter(function (c) { return c !== cur && !c.gone && c.t === t; })[0]; if (on) travel(on); else if (gh) travel({ t: gh.t, c: gh.c, x: gh.x, y: gh.y }); else if (t !== cur.t) travel({ t: t, c: clusterOf[t] }); }
+  gq.addEventListener("input", function () { sel = 0; sugg(); }); gq.addEventListener("focus", sugg);
+  gq.addEventListener("blur", function () { setTimeout(function () { gs.classList.remove("open"); }, 150); });
+  gq.addEventListener("keydown", function (e) { if (e.key === "Escape") { gq.blur(); return; } if (!found.length) return; if (e.key === "ArrowDown") sel = (sel + 1) % found.length; else if (e.key === "ArrowUp") sel = (sel + found.length - 1) % found.length; else if (e.key === "Enter") { choose(found[sel]); return; } else return; e.preventDefault(); sugg(); });
+  gs.addEventListener("mousedown", function (e) { e.preventDefault(); }); gs.addEventListener("click", function (e) { var li = e.target.closest("li[data-i]"); if (li) choose(found[+li.dataset.i]); });
+  document.addEventListener("keydown", function (e) { if (e.key === "/" && body.dataset.view === "play" && document.activeElement !== gq) { e.preventDefault(); gq.focus(); } });
+  function surprise() { var t; do { t = titles[Math.floor(Math.random() * titles.length)]; } while (cur && t === cur.t); if (mode !== "explore") setMode("explore"); if (cur) choose(t); else reset({ t: t, c: clusterOf[t] }); }
+  $("surprise").addEventListener("click", surprise);
+
+  /* modes */
+  var SOON = { connect: "Connect two is planned: type two topics and the shortest chain between them lights up.", daily: "Daily constellation is planned: one pair a day, the same for everyone.", drift: "Drift is planned: the map explores itself, like a screensaver." };
+  var toastT = 0; function toast(m) { var el = $("toast"); el.textContent = m; el.style.display = "block"; clearTimeout(toastT); toastT = setTimeout(function () { el.style.display = "none"; }, 3600); }
+  function setMode(m) { mode = m; document.querySelectorAll("#modes button").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.mode === m); }); if (m !== "race") { race = null; hud(); } }
+  $("modes").addEventListener("click", function (e) { var b = e.target.closest("[data-mode]"); if (!b) return; var m = b.dataset.mode; if (SOON[m]) { toast(SOON[m]); return; } if (m === "race") newRace(); else setMode("explore"); });
+  function newRace() { var a, b, d, n = 0; do { a = titles[Math.floor(Math.random() * titles.length)]; b = titles[Math.floor(Math.random() * titles.length)]; d = a === b ? -1 : bfs(a, b); n++; } while ((d < 3 || d > 4) && n < 200); startRace(a, b); }
+  function startRace(a, b) { setMode("race"); race = { start: a, target: b, clicks: 0, par: bfs(a, b), t0: performance.now(), done: false }; reset({ t: a, c: clusterOf[a] }); hud(); }
+  function clock(ms) { var s = Math.floor(ms / 1000); return (s < 600 ? "0" : "") + Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2); }
+  function hud() {
+    var el = $("hud"); if (!race) { el.className = "card"; return; }
+    el.className = "card on" + (race.done ? " win" : "");
+    el.innerHTML = race.done
+      ? "<div class='line'>Arrived at <em>" + esc(race.target) + "</em></div><div class='stats'><span>" + race.clicks + (race.clicks === 1 ? " click" : " clicks") + "</span><span>" + clock(race.time) + "</span><span>par " + race.par + "</span><button class='lk' type='button' id='again'>Race again</button><button class='lk' type='button' id='quit'>Keep exploring</button></div>"
+      : "<div class='line'>" + esc(race.start) + " → <em>" + esc(race.target) + "</em></div><div class='stats'><span id='rc'>" + race.clicks + " clicks</span><span id='rt'>00:00</span><span>par " + race.par + "</span><button class='lk' type='button' id='again'>New race</button><button class='lk' type='button' id='quit'>Quit</button></div>";
+  }
+  function hudTime(now) { var t = $("rt"); if (t) t.textContent = clock(now - race.t0); }
+  $("hud").addEventListener("click", function (e) { if (e.target.id === "again") newRace(); else if (e.target.id === "quit") setMode("explore"); });
+
+  document.querySelectorAll("a:not([href])").forEach(function (a) { a.tabIndex = 0; a.setAttribute("role", "link"); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target.matches && e.target.matches("a:not([href])")) e.target.click(); });
+  route();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (cur) cur.nodes.forEach(function (n) { n.wb = n.ws = undefined; }); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+/* ASTRIS DESIGN SYSTEM v1
+   Layout idea: two worlds. The site around the game is an encyclopedia page (header, sidebar, tabs, boxes, footer).
+   The game is open space: one glowing constellation that grows as you travel. The logo and link colors bridge them. */
+:root {
+  --page: #f8f9fa; /* chrome behind the article */
+  --surface: #ffffff; /* the article itself */
+  --ink: #202122;
+  --muted: #54595d;
+  --rule: #a2a9b1;
+  --rule-soft: #c8ccd1;
+  --tint: #eaecf0; /* box headers, infobox */
+  --link: #3366cc;
+  --visited: #6b4ba1;
+  --redlink: #bf3c2c;
+  --star: #3366cc; /* logo star edge */
+  --star-core: #86abf7;
+  /* space palette: fixed, the game is always night */
+  --night: #07080c;
+  --night-2: #0e1016;
+  --starlight: #eceaf2;
+  --dust: #9a9db0;
+  --neb-blue: #6ea3ff;
+  --neb-violet: #a48bf5;
+  --neb-rose: #f08aa9;
+  --serif: 'Linux Libertine', 'Libertinus Serif', Georgia, Times, 'Source Serif 4', serif;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Lato, Helvetica, Arial, sans-serif;
+  --logo: 'Source Serif 4', Georgia, serif;
+  --mono: 'IBM Plex Mono', Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --page: #0c0d10;
+    --surface: #121419;
+    --ink: #e9e7e1;
+    --muted: #a2a5ae;
+    --rule: #454a54;
+    --rule-soft: #2f333b;
+    --tint: #1b1e25;
+    --link: #7aa9ff;
+    --visited: #b59cf2;
+    --redlink: #ff7b6e;
+    --star: #5a8bf2;
+    --star-core: #ffffff;
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --page: #0c0d10;
+  --surface: #121419;
+  --ink: #e9e7e1;
+  --muted: #a2a5ae;
+  --rule: #454a54;
+  --rule-soft: #2f333b;
+  --tint: #1b1e25;
+  --link: #7aa9ff;
+  --visited: #b59cf2;
+  --redlink: #ff7b6e;
+  --star: #5a8bf2;
+  --star-core: #ffffff;
+}
+
+/* tokens added when the mockup was split into modules: values that were inline in the mockup */
+:root {
+  --on-accent: #ffffff;
+  --space-link: #8fb4ff;
+  --space-visited: #c0a8f7;
+  --space-redlink: #ff7b6e;
+  --logo-night-core: #ffffff;
+  --logo-night-mid: #a9c6ff;
+  --logo-night-edge: #5a8bf2;
+  /* rank dots, brightest to faintest */
+  --rank-1: #ffffff;
+  --rank-2: #e6eaf7;
+  --rank-3: #cdd3e6;
+  --rank-4: #aab1cc;
+  --rank-5: #8f96b3;
+  --legend-mid: #dfe4f5;
+  /* canvas text */
+  --title-current: #f6f4fb;
+  --label-strong: rgba(236, 238, 248, 0.96);
+  --label-soft: rgba(168, 172, 194, 0.85);
+  --label-visited: rgba(192, 168, 247, 0.95);
+  /* RGB triples, used by the canvas with its own alpha */
+  --white-rgb: 255, 255, 255;
+  --starlight-rgb: 236, 234, 242;
+  --trail-rgb: 192, 168, 247;
+  --dust-a-rgb: 200, 190, 255;
+  --dust-b-rgb: 220, 230, 255;
+  /* the twelve subject colour families */
+  --subject-architecture: 255, 190, 120;
+  --subject-urban-planning: 176, 226, 110;
+  --subject-civil-engineering: 110, 163, 255;
+  --subject-sustainable-design: 96, 220, 160;
+  --subject-astronomy: 164, 139, 245;
+  --subject-music: 240, 138, 169;
+  --subject-biology: 84, 214, 208;
+  --subject-philosophy: 201, 168, 255;
+  --subject-computer-science: 98, 200, 255;
+  --subject-history: 255, 224, 110;
+  --subject-geography: 130, 214, 180;
+  --subject-video-game: 232, 121, 216;
+  /* timing used by CSS; canvas timings live in src/engine/config.ts */
+  --t-logo-twinkle: 7s;
+  --t-tint-shift: 1.4s;
+  --t-nebula-drift: 46s;
+}

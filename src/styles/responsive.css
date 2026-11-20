@@ -1,0 +1,53 @@
+@media (max-width: 900px) {
+  .vbody {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px 12px 0;
+  }
+  .vside {
+    display: none;
+  }
+  .vside.open {
+    display: block;
+    padding: 0 4px;
+  }
+  .vfoot {
+    grid-column: 1;
+  }
+  .cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .vmain {
+    padding: 0 16px 22px;
+  }
+  .vtabs {
+    margin: 0 -16px 14px;
+    padding: 8px 16px 0;
+  }
+  .infobox {
+    float: none;
+    width: auto;
+    margin: 10px 0;
+  }
+  #panel {
+    display: none;
+  }
+  #hud {
+    max-width: calc(100% - 24px);
+    top: 118px;
+  }
+  #legend {
+    display: none;
+  }
+  .gzoom {
+    top: 126px;
+  }
+  .gbar .right .lk {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo svg,
+  #play .neb {
+    animation: none;
+  }
+}
