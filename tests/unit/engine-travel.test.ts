@@ -168,6 +168,35 @@ describe('a map that grows', () => {
     expect(close).toBe(0);
   });
 
+  it('clears older stars and threads out of the area a new constellation takes', async () => {
+    const { dom, engine, go } = await setup();
+    for (const title of ['Jazz', 'Black hole', 'Stoicism', 'Bridge']) {
+      await go(title);
+      dom.run(SETTLE_MS);
+      const now = engine.current!;
+      const R = CONFIG.rMax * now.sc * CONFIG.clearShare;
+      const visited = new Set(engine.memories.map((c) => c.title).concat(now.title));
+      for (const c of engine.memories) {
+        for (const n of c.nodes) {
+          if (n.dup || visited.has(n.title)) continue;
+          expect(Math.hypot(c.x + n.dx * c.sc - now.x, c.y + n.dy * c.sc - now.y)).toBeGreaterThanOrEqual(R);
+        }
+      }
+      // no thread hangs from a star that was removed
+      for (const c of engine.memories.concat(now)) for (const n of c.nodes) if (n.par) expect(c.nodes).toContain(n.par);
+    }
+  });
+
+  it('never clears the race target', async () => {
+    const { dom, engine, go } = await setup();
+    const target = engine.current!.nodes.find((n) => n.rank === 1)!;
+    engine.markerTitle = target.title;
+    await go('Jazz');
+    dom.run(SETTLE_MS);
+    const all = engine.memories.concat(engine.current!).flatMap((c) => c.nodes.map((n) => n.title));
+    expect(all).toContain(target.title);
+  });
+
   it('travels back to a centre already on the map without adding to it', async () => {
     const { dom, engine, go } = await setup();
     await go('Jazz');
