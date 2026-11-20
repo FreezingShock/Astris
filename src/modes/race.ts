@@ -115,12 +115,20 @@ export async function randomPair(provider: DataProvider, rand: () => number = Ma
   throw new Error('No race could be picked.');
 }
 
+/** How a finished race compares with par, in words. Empty while par is unknown. */
+export function verdict(clicks: number, par: number | null): string {
+  if (par === null || par < 0) return '';
+  if (clicks === par) return 'Par!';
+  if (clicks < par) return par - clicks + ' under par, a shortcut';
+  return clicks - par + ' over par';
+}
+
 function parText(race: Race): string {
   return race.par === null ? 'finding par…' : race.par < 0 ? 'par unknown' : 'par ' + race.par;
 }
 
 /** The status card while a random pair is being picked. */
-export const PICKING_HTML = "<div class='line'>Picking two articles…</div>";
+export const PICKING_HTML = "<div class='line'>Picking two articles…</div><div class='stats'><button class='lk' type='button' id='quit'>Cancel</button></div>";
 
 const button = (id: string, text: string): string => "<button class='lk' type='button' id='" + id + "'>" + text + '</button>';
 
@@ -149,7 +157,9 @@ export function hudHtml(race: Race): string {
     day +
     "<div class='line'>Arrived at <em>" +
     esc(race.target) +
-    "</em></div><div class='stats'><span>" +
+    '</em></div>' +
+    (verdict(race.clicks, race.par) ? "<div class='line'>" + esc(verdict(race.clicks, race.par)) + '</div>' : '') +
+    "<div class='stats'><span>" +
     race.clicks +
     (race.clicks === 1 ? ' click' : ' clicks') +
     '</span><span>' +

@@ -5,7 +5,7 @@ import { DAILY_POOL, bestDaily, dailyPair, dayLabel, dayOf, saveDaily } from '..
 import { failureOf } from '../../src/modes/failure';
 import { Graph, graphOf, route } from '../../src/modes/graph';
 import { closest } from '../../src/modes/panel';
-import { PAR_BUDGET, beginRace, hudHtml, par, randomPair, stepRace } from '../../src/modes/race';
+import { PAR_BUDGET, beginRace, verdict, hudHtml, par, randomPair, stepRace } from '../../src/modes/race';
 import { safeUrl, summaryHtml } from '../../src/modes/summary';
 import type { DataProvider } from '../../src/types';
 
@@ -418,5 +418,15 @@ describe('picking the next chain for the reader', () => {
     const nodes = [n('a', 4, 9), n('b', 1, 1), n('c', 1, 5), n('d', 2, 3)];
     expect(closest(nodes, new Set(), 4).map((x) => x.title)).toEqual(['c', 'b', 'd', 'a']);
     expect(closest(nodes, new Set(['c']), 4).map((x) => x.title)).toEqual(['b', 'd', 'a', 'c']);
+  });
+});
+
+describe('the verdict on a finished race', () => {
+  it('compares clicks with par in words', () => {
+    expect(verdict(4, 4)).toBe('Par!');
+    expect(verdict(5, 3)).toBe('2 over par');
+    expect(verdict(2, 3)).toBe('1 under par, a shortcut');
+    expect(verdict(4, null)).toBe('');
+    expect(verdict(4, -1)).toBe('');
   });
 });

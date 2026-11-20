@@ -472,7 +472,11 @@ export class Play {
         gq.blur();
         return;
       }
-      if (!this.found.length) return;
+      if (!this.found.length) {
+        // Enter on text with no suggestion yet still tries the article: the provider follows redirects.
+        if (e.key === 'Enter' && gq.value.trim()) this.choose(gq.value.trim());
+        return;
+      }
       if (e.key === 'ArrowDown') this.sel = (this.sel + 1) % this.found.length;
       else if (e.key === 'ArrowUp') this.sel = (this.sel + this.found.length - 1) % this.found.length;
       else if (e.key === 'Enter') {
