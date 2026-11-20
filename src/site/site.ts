@@ -127,7 +127,7 @@ export class Site {
       }
     });
     document.addEventListener('click', (e) => {
-      const a = (e.target as HTMLElement).closest<HTMLElement>('[data-go],[data-race],[data-connect],[data-random],[data-topic],[data-scroll]');
+      const a = (e.target as HTMLElement).closest<HTMLElement>('[data-go],[data-race],[data-connect],[data-drift],[data-random],[data-topic],[data-scroll]');
       if (!a) return;
       // A modified click on a real link opens a new tab, as links do.
       if (a.hasAttribute('href') && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0)) return;
@@ -145,6 +145,7 @@ export class Site {
       this.go('play');
       const topic = d.topic;
       if (d.race) setTimeout(() => void this.play.startDaily(), 30);
+      else if (d.drift) setTimeout(() => this.play.startDrift(), 30);
       else if (d.connect) setTimeout(() => void this.play.startConnect(), 30);
       else if (d.random) setTimeout(() => void this.play.surprise(), 30);
       else if (topic) setTimeout(() => void this.play.open(topic), 30);
