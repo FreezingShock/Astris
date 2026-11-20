@@ -1,7 +1,8 @@
 import type { DataProvider } from '../types';
 import { jumpTo, subjectKeyHtml } from '../styles';
 import { MiniMap } from '../engine';
-import { dailyPair, par, type Play } from '../modes';
+import { clearStats, dailyPair, loadStats, par, type Play } from '../modes';
+import { statsHtml } from './stats';
 import { articleOf, dispatchPlayLink, isRouteName, pathOf, racePairOf, routeOf, type RouteName } from './router';
 
 /** The article at the centre of the main page's small map. */
@@ -9,7 +10,7 @@ const TODAY = 'Architecture';
 /** How many stars the small map shows. */
 const MINI_STARS = 70;
 
-const SITE_PAGES: RouteName[] = ['main-page'];
+const SITE_PAGES: RouteName[] = ['main-page', 'stats'];
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -95,11 +96,17 @@ export class Site {
         if (p === name) tab.setAttribute('aria-current', 'page');
         else tab.removeAttribute('aria-current');
       }
+      if (name === 'stats') this.renderStats();
       window.scrollTo(0, 0);
       this.menu(false);
       this.play.leave();
     } else if (was !== 'play' || !this.play.engine.running) this.play.enter();
     this.miniTick();
+  }
+
+  /** Fill the stats page from what this browser has kept. */
+  private renderStats(): void {
+    $('statsBody').innerHTML = statsHtml(loadStats());
   }
 
   /** Open or close the side menu. It only folds away on narrow screens. */
@@ -148,6 +155,11 @@ export class Site {
       else if (d.connect) setTimeout(() => void this.play.startConnect(), 30);
       else if (d.random) setTimeout(() => void this.play.surprise(), 30);
       else if (topic) setTimeout(() => void this.play.open(topic), 30);
+    });
+    $('statsBody').addEventListener('click', (e) => {
+      if (!(e.target as HTMLElement).closest('#statsReset')) return;
+      clearStats();
+      this.renderStats();
     });
     $('menuBtn').addEventListener('click', () => this.menu(!$('vside').classList.contains('open')));
     $('vsearch').addEventListener('submit', (e) => {

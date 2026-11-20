@@ -89,3 +89,33 @@ test('Drift travels on its own until the reader quits', async ({ page }) => {
   await page.locator('#modes [data-mode="explore"]').click();
   await expect(page.locator('#modes [data-mode="explore"]')).toHaveAttribute('aria-pressed', 'true');
 });
+
+test('the stats page starts empty and lists a finished run', async ({ page }) => {
+  await page.goto('/stats');
+  await expect(page.locator('#page-stats')).toBeVisible();
+  await expect(page.locator('#statsBody')).toContainText('No runs yet');
+  await page.evaluate(() => {
+    const run = { day: Math.floor(Date.now() / 86_400_000), mode: 'race', start: 'Jazz', target: 'Bridge', clicks: 3, par: 3, time: 42_000, hints: 0, points: 880, stars: 3 };
+    const stats = {
+      version: 1,
+      runs: 1,
+      points: 880,
+      stars: 3,
+      streak: 1,
+      longest: 1,
+      lastDay: run.day,
+      bestPoints: 880,
+      fewestClicks: 3,
+      fastest: 42_000,
+      threeStar: 1,
+      pairs: { 'Jazz|Bridge': 880 },
+      recent: [run],
+    };
+    localStorage.setItem('astris:stats:v1', JSON.stringify(stats));
+  });
+  await page.reload();
+  await expect(page.locator('#statsBody')).toContainText('Jazz → Bridge');
+  await expect(page.locator('#statsBody .tile').first()).toContainText('1 day');
+  await page.locator('#statsReset').click();
+  await expect(page.locator('#statsBody')).toContainText('No runs yet');
+});

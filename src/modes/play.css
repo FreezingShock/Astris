@@ -424,6 +424,23 @@
   color: var(--neb-rose);
   text-shadow: 0 0 14px rgba(240, 138, 169, 0.7);
 }
+#hud .score {
+  font-size: 13.5px;
+  margin: 3px 0 2px;
+  color: var(--muted);
+}
+#hud .score b {
+  color: var(--ink);
+}
+#hud .score .stars {
+  color: var(--neb-rose);
+  letter-spacing: 2px;
+  font-size: 16px;
+}
+#hud .score .pb {
+  color: var(--neb-rose);
+  font-weight: 600;
+}
 #hud.win {
   box-shadow:
     0 0 0 1px var(--neb-rose),

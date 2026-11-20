@@ -4,7 +4,8 @@ import { replay, subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
 import { Discovery, Share, Tip, firstLine, initKeyboard } from '../comforts';
 import { Connect, connectHtml, type ConnectState } from './connect';
-import { dailyPair, saveDaily } from './daily';
+import { dailyPair, dayOf, saveDaily } from './daily';
+import { recordRun } from './stats';
 import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
 import { UNREACHABLE_NOTE, failureOf } from './failure';
 import { legendHtml, panelHtml, suggestNext } from './panel';
@@ -373,6 +374,16 @@ export class Play {
     if (stepRace(race, title, now)) {
       this.engine.markerTitle = null;
       if (race.day !== undefined) race.best = saveDaily(race.day, { clicks: race.clicks, time: race.time });
+      race.result = recordRun({
+        day: dayOf(),
+        mode: race.day === undefined ? 'race' : 'daily',
+        start: race.start,
+        target: race.target,
+        clicks: race.clicks,
+        par: race.par,
+        time: race.time,
+        hints: race.hints,
+      });
       this.prepare();
     }
     this.hud();
