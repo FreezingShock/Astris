@@ -527,8 +527,9 @@ export class Play {
       // An empty box offers the best next stars, so a new direction is one click away.
       const cur = this.engine.current;
       this.found = cur ? suggestNext(cur.nodes, this.engine.visited) : [];
+      const fresh = !this.gs.classList.contains('open');
+      this.renderSuggestions('', fresh);
       this.gs.classList.toggle('open', this.found.length > 0);
-      this.renderSuggestions('');
       return;
     }
     let found: Suggestion[];
@@ -539,14 +540,18 @@ export class Play {
     }
     if (seq !== this.suggestSeq) return;
     this.found = found;
+    const fresh = !this.gs.classList.contains('open');
+    this.renderSuggestions(q, fresh);
     this.gs.classList.add('open');
-    this.renderSuggestions(q);
   }
 
-  private renderSuggestions(q: string): void {
+  /** Draw the list. `fresh` plays the staggered entrance, used only when the list opens, not on every keystroke. */
+  private renderSuggestions(q: string, fresh = false): void {
     const gs = this.gs;
+    gs.classList.toggle('fresh', fresh);
     if (!this.found.length) {
-      gs.innerHTML = "<li style='color:var(--space-redlink);cursor:default'>" + esc(q) + '<span>no such article ' + esc(this.copy.missing) + '</span></li>';
+      gs.innerHTML =
+        "<li class='none' role='option' aria-disabled='true'><span class='t'>" + esc(q) + "</span><span class='d'>no such article " + esc(this.copy.missing) + '</span></li>';
       return;
     }
     if (this.sel >= this.found.length) this.sel = 0;
@@ -555,9 +560,36 @@ export class Play {
         const t = s.title;
         const k = q ? t.toLowerCase().indexOf(q.toLowerCase()) : -1;
         const h = k >= 0 ? esc(t.slice(0, k)) + '<mark>' + esc(t.slice(k, k + q.length)) + '</mark>' + esc(t.slice(k + q.length)) : esc(t);
-        return "<li role='option' data-i='" + i + "' class='" + (i === this.sel ? 'on' : '') + "'>" + h + '<span>' + esc(s.description ?? '') + '</span></li>';
+        const d = s.description ? "<span class='d'>" + esc(s.description) + '</span>' : '';
+        return (
+          "<li role='option' data-i='" +
+          i +
+          "' style='--i:" +
+          Math.min(i, 8) +
+          "' aria-selected='" +
+          (i === this.sel) +
+          "' class='" +
+          (i === this.sel ? 'on' : '') +
+          "'>" +
+          "<span class='t'>" +
+          h +
+          '</span>' +
+          d +
+          '</li>'
+        );
       })
       .join('');
+  }
+
+  /** Move the highlight without rebuilding the list, so arrow keys and hover never replay the entrance. */
+  private select(i: number, scroll = false): void {
+    this.sel = i;
+    this.gs.querySelectorAll<HTMLElement>('li[data-i]').forEach((li) => {
+      const on = Number(li.dataset.i) === i;
+      li.classList.toggle('on', on);
+      li.setAttribute('aria-selected', String(on));
+      if (on && scroll) li.scrollIntoView({ block: 'nearest' });
+    });
   }
 
   /* ---------- wiring ---------- */
@@ -582,17 +614,20 @@ export class Play {
         if (e.key === 'Enter' && gq.value.trim()) this.choose(gq.value.trim());
         return;
       }
-      if (e.key === 'ArrowDown') this.sel = (this.sel + 1) % this.found.length;
-      else if (e.key === 'ArrowUp') this.sel = (this.sel + this.found.length - 1) % this.found.length;
+      if (e.key === 'ArrowDown') this.select((this.sel + 1) % this.found.length, true);
+      else if (e.key === 'ArrowUp') this.select((this.sel + this.found.length - 1) % this.found.length, true);
       else if (e.key === 'Enter') {
         const hit = this.found[this.sel];
         if (hit) this.choose(hit.title);
         return;
       } else return;
       e.preventDefault();
-      this.renderSuggestions(gq.value.trim());
     });
     gs.addEventListener('mousedown', (e) => e.preventDefault());
+    gs.addEventListener('mousemove', (e) => {
+      const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-i]');
+      if (li && Number(li.dataset.i) !== this.sel) this.select(Number(li.dataset.i));
+    });
     gs.addEventListener('click', (e) => {
       const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-i]');
       const hit = li ? this.found[Number(li.dataset.i)] : undefined;
