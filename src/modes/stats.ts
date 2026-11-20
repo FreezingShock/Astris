@@ -33,6 +33,16 @@ export interface Stats {
   pairs: Record<string, number>;
   /** The newest runs first, capped. */
   recent: RunRecord[];
+  /** The best finish for each daily race, by day ("123") or hard day ("h123"). The one home of daily history. */
+  daily: Record<string, DailyBest>;
+  /** True once the old `astris:daily:` keys have been copied in. They are left in place, never deleted. */
+  migrated: boolean;
+}
+
+export interface DailyBest {
+  clicks: number;
+  time: number;
+  par?: number;
 }
 
 export const RECENT_KEPT = 20;
@@ -53,6 +63,8 @@ export const emptyStats = (): Stats => ({
   threeStar: 0,
   pairs: {},
   recent: [],
+  daily: {},
+  migrated: false,
 });
 
 type Store = Pick<Storage, 'getItem' | 'setItem'>;
@@ -69,7 +81,19 @@ const num = (v: unknown, fallback: number): number => (typeof v === 'number' && 
 const numOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 /** What storage holds, or an empty record when it holds nothing usable. Bad fields fall back one by one. */
-export function loadStats(store: Pick<Store, 'getItem'> | undefined = browserStore()): Stats {
+export function loadStats(store: (Pick<Store, 'getItem'> & Partial<Pick<Storage, 'key' | 'length'>> & Partial<Pick<Store, 'setItem'>>) | undefined = browserStore()): Stats {
+  const stats = parseStats(store);
+  if (!store || stats.migrated) return stats;
+  const moved = migrateDaily(stats, store);
+  try {
+    store.setItem?.(KEY, JSON.stringify(moved));
+  } catch {
+    // Blocked: the copy is made again next time.
+  }
+  return moved;
+}
+
+function parseStats(store: Pick<Store, 'getItem'> | undefined): Stats {
   try {
     const raw: unknown = JSON.parse(store?.getItem(KEY) ?? 'null');
     if (typeof raw !== 'object' || raw === null) return emptyStats();
@@ -94,10 +118,61 @@ export function loadStats(store: Pick<Store, 'getItem'> | undefined = browserSto
       threeStar: num(r.threeStar, 0),
       pairs,
       recent,
+      daily: dailyOf(r.daily),
+      migrated: r.migrated === true,
     };
   } catch {
     return emptyStats();
   }
+}
+
+const dayKey = (day: number, hard: boolean): string => (hard ? 'h' : '') + day;
+
+function dailyOf(raw: unknown): Record<string, DailyBest> {
+  const out: Record<string, DailyBest> = {};
+  if (typeof raw !== 'object' || raw === null) return out;
+  for (const [k, v] of Object.entries(raw)) {
+    const best = bestOf(v);
+    if (best && /^h?\d+$/.test(k)) out[k] = best;
+  }
+  return out;
+}
+
+function bestOf(v: unknown): DailyBest | null {
+  if (typeof v !== 'object' || v === null) return null;
+  const { clicks, time, par } = v as Record<string, unknown>;
+  if (typeof clicks !== 'number' || typeof time !== 'number') return null;
+  return typeof par === 'number' ? { clicks, time, par } : { clicks, time };
+}
+
+const LEGACY = 'astris:daily:';
+const PROBE_DAYS = 400;
+
+/** Copy the old per-day keys into the stats record. A store that cannot be listed is probed day by day. The old keys stay. */
+export function migrateDaily(stats: Stats, store: Pick<Storage, 'getItem'> & Partial<Pick<Storage, 'key' | 'length'>>, today: number = Math.floor(Date.now() / 86_400_000)): Stats {
+  if (stats.migrated) return stats;
+  const daily = { ...stats.daily };
+  const take = (day: number, hard: boolean): void => {
+    let best: DailyBest | null;
+    try {
+      best = bestOf(JSON.parse(store.getItem(LEGACY + (hard ? 'hard:' : '') + day) ?? 'null'));
+    } catch {
+      return;
+    }
+    const k = dayKey(day, hard);
+    if (best && !daily[k]) daily[k] = best;
+  };
+  if (typeof store.key === 'function' && typeof store.length === 'number') {
+    for (let i = 0; i < store.length; i++) {
+      const m = /^astris:daily:(hard:)?(\d+)$/.exec(store.key(i) ?? '');
+      if (m) take(Number(m[2]), m[1] !== undefined);
+    }
+  } else
+    for (let d = today - PROBE_DAYS; d <= today + 1; d++) {
+      take(d, false);
+      take(d, true);
+    }
+  return { ...stats, daily, migrated: true };
 }
 
 /** The streak a reader holds on a day: it carries on from yesterday, and is gone after a missed day. */
@@ -148,6 +223,8 @@ export function addRun(old: Stats, run: Omit<RunRecord, 'points' | 'stars'>): Re
     threeStar: old.threeStar + (score.stars === 3 ? 1 : 0),
     pairs,
     recent: [record, ...old.recent].slice(0, RECENT_KEPT),
+    daily: old.daily,
+    migrated: old.migrated,
   };
   return { stats, score, records, isNew, streak, streakGrew: old.lastDay !== run.day };
 }
@@ -170,4 +247,22 @@ export function clearStats(store: Pick<Store, 'setItem'> | undefined = browserSt
   } catch {
     // Nothing to clear if storage is blocked.
   }
+}
+
+/** The best finish kept for a daily race, or null. */
+export function dailyBest(day: number, hard = false, store: Parameters<typeof loadStats>[0] = browserStore()): DailyBest | null {
+  return loadStats(store).daily[dayKey(day, hard)] ?? null;
+}
+
+/** Keep a daily finish when it beats the stored one: fewer clicks, or the same clicks in less time. Returns the best. */
+export function saveDailyBest(day: number, result: DailyBest, hard = false, store: Store | undefined = browserStore()): DailyBest {
+  const stats = loadStats(store);
+  const old = stats.daily[dayKey(day, hard)];
+  if (old && (old.clicks < result.clicks || (old.clicks === result.clicks && old.time <= result.time))) return old;
+  try {
+    store?.setItem(KEY, JSON.stringify({ ...stats, daily: { ...stats.daily, [dayKey(day, hard)]: result } }));
+  } catch {
+    // Full or blocked: the finish still shows, it is just not remembered.
+  }
+  return result;
 }

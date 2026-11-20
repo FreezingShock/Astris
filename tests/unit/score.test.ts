@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { scoreRun, starsText } from '../../src/modes/score';
-import { addRun, emptyStats, loadStats, recordRun, streakOn } from '../../src/modes/stats';
+import { addRun, dailyBest, emptyStats, loadStats, recordRun, saveDailyBest, streakOn } from '../../src/modes/stats';
 
 const mem = (): Pick<Storage, 'getItem' | 'setItem'> & { data: Map<string, string> } => {
   const data = new Map<string, string>();
@@ -99,5 +99,32 @@ describe('stats', () => {
     store.setItem('astris:stats:v1', 'not json');
     expect(loadStats(store).runs).toBe(0);
     expect(recordRun(run(), undefined).stats.runs).toBe(1);
+  });
+});
+
+describe('daily history in the stats record', () => {
+  it('copies the old astris:daily keys in once, keeps them, and reads and writes through stats', () => {
+    const D = Math.floor(Date.now() / 86_400_000) - 3;
+    const store = mem();
+    store.setItem(`astris:daily:${D}`, JSON.stringify({ clicks: 4, time: 9000, par: 3 }));
+    store.setItem(`astris:daily:hard:${D + 1}`, JSON.stringify({ clicks: 6, time: 1 }));
+    store.setItem(`astris:daily:${D + 2}`, '{broken');
+    expect(dailyBest(D, false, store)).toEqual({ clicks: 4, time: 9000, par: 3 });
+    expect(dailyBest(D + 1, true, store)).toEqual({ clicks: 6, time: 1 });
+    expect(dailyBest(D + 1, false, store)).toBeNull();
+    expect(dailyBest(D + 2, false, store)).toBeNull();
+    expect(loadStats(store).migrated).toBe(true);
+    expect(store.data.get(`astris:daily:${D}`)).toBeDefined();
+    // Later changes to the old key are ignored: stats is the one source of truth.
+    store.setItem(`astris:daily:${D}`, JSON.stringify({ clicks: 1, time: 1 }));
+    expect(dailyBest(D, false, store)?.clicks).toBe(4);
+    expect(saveDailyBest(D, { clicks: 3, time: 5 }, false, store)).toEqual({ clicks: 3, time: 5 });
+    expect(saveDailyBest(D, { clicks: 5, time: 1 }, false, store)).toEqual({ clicks: 3, time: 5 });
+  });
+  it('keeps daily history when a run is recorded', () => {
+    const store = mem();
+    saveDailyBest(7, { clicks: 2, time: 1 }, false, store);
+    recordRun(run(), store);
+    expect(dailyBest(7, false, store)).toEqual({ clicks: 2, time: 1 });
   });
 });
