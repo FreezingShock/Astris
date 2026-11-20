@@ -4,6 +4,9 @@ import { CONFIG } from '../../src/engine/config';
 import { Engine } from '../../src/engine/engine';
 import { fakeDom } from './helpers/fake-dom';
 
+// These tests run thousands of simulated frames on a fake clock. The result never depends on wall time,
+// but a busy CI worker can take several times longer than a laptop, so the budget is generous.
+vi.setConfig({ testTimeout: 30_000 });
 afterEach(() => vi.unstubAllGlobals());
 const provider = new SampleProvider();
 
