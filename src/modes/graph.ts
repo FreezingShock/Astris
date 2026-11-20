@@ -6,6 +6,8 @@ import type { DataProvider } from '../types';
  */
 export class Graph {
   private readonly known = new Map<string, Promise<string[]>>();
+  /** Finished searches, so asking again for the same chain costs nothing and gives the same answer. */
+  readonly routes = new Map<string, Promise<string[] | null>>();
 
   constructor(private readonly provider: DataProvider) {}
 
@@ -45,6 +47,11 @@ export interface RouteOptions {
   maxDepth: number;
   /** The most articles the search may ask the provider for. Remembered articles are free. */
   budget: number;
+  /**
+   * The most new articles to ask for at each step out from either end, strongest ties first.
+   * Leave it out to ask for all of them, which finds the shortest chain but costs far more requests.
+   */
+  beam?: number;
 }
 
 interface Side {
@@ -77,7 +84,8 @@ async function meet(graph: Graph, from: string, to: string, opt: RouteOptions, s
   while (fwd.depth + bwd.depth < opt.maxDepth && fwd.frontier.length && bwd.frontier.length) {
     const forward = fwd.frontier.length <= bwd.frontier.length;
     const [a, b] = forward ? [fwd, bwd] : [bwd, fwd];
-    const level = a.frontier.filter((t) => graph.has(t) || spent.n++ < opt.budget);
+    let asked = 0;
+    const level = a.frontier.filter((t) => graph.has(t) || (asked < (opt.beam ?? Infinity) && spent.n < opt.budget && ++asked && ++spent.n));
     const lists = await Promise.all(level.map((t) => graph.neighbours(t)));
     const next: string[] = [];
     let best: { at: string; total: number } | null = null;
@@ -101,9 +109,19 @@ async function meet(graph: Graph, from: string, to: string, opt: RouteOptions, s
 
 /**
  * A chain of articles from one to another where every step is a real click, or null when none was found
- * within the depth and the request budget. With the budget to spare it is the shortest chain.
+ * within the depth and the request budget. With no beam and budget to spare it is the shortest chain.
  */
-export async function route(graph: Graph, from: string, to: string, opt: RouteOptions): Promise<string[] | null> {
+export function route(graph: Graph, from: string, to: string, opt: RouteOptions): Promise<string[] | null> {
+  const key = [from, to, opt.maxDepth, opt.budget, opt.beam].join('\n');
+  let hit = graph.routes.get(key);
+  if (!hit) {
+    hit = search(graph, from, to, opt);
+    graph.routes.set(key, hit);
+  }
+  return hit;
+}
+
+async function search(graph: Graph, from: string, to: string, opt: RouteOptions): Promise<string[] | null> {
   if (from === to) return [from];
   const spent = { n: 0 };
   const broken = new Set<string>();

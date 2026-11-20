@@ -4,10 +4,15 @@ import { graphOf, route } from './graph';
 
 /** The furthest a par search looks before giving up. */
 export const PAR_DEPTH = 4;
-/** The most articles one par search may ask the provider for. Each can cost several requests on live data. */
-export const PAR_BUDGET = 24;
-/** The smaller budget used to double-check a random pair. */
-const CHECK_BUDGET = 8;
+/**
+ * The most articles one par search may ask the provider for. On live data an article costs about
+ * seven requests and a browser is allowed 200 a minute, so a search has to stay small.
+ */
+export const PAR_BUDGET = 10;
+/** How many new articles a par search asks for at each step, strongest ties first. */
+export const PAR_BEAM = 3;
+/** The smaller budget used to look for a shortcut between a random pair. */
+const CHECK_BUDGET = 3;
 /** The most articles one walk may ask for while looking for a pair. */
 const WALK_BUDGET = 16;
 
@@ -39,10 +44,11 @@ export function stepRace(race: Race, title: string, now: number): boolean {
 
 /**
  * Fewest clicks found from one article to another, or -1 when no chain was found within maxDepth
- * and the request budget. A par that is returned always belongs to a chain that exists.
+ * and the request budget. A par that is returned always belongs to a chain that exists. The search follows
+ * the strongest ties only, so on a big graph a shorter chain can exist; pass Infinity as the beam to rule that out.
  */
-export async function par(provider: DataProvider, from: string, to: string, maxDepth = PAR_DEPTH, budget = PAR_BUDGET): Promise<number> {
-  const chain = await route(graphOf(provider), from, to, { maxDepth, budget });
+export async function par(provider: DataProvider, from: string, to: string, maxDepth = PAR_DEPTH, budget = PAR_BUDGET, beam = PAR_BEAM): Promise<number> {
+  const chain = await route(graphOf(provider), from, to, { maxDepth, budget, beam });
   return chain ? chain.length - 1 : -1;
 }
 
@@ -93,7 +99,7 @@ export async function randomPair(provider: DataProvider, rand: () => number = Ma
     const start = path[0] ?? '';
     const target = path[path.length - 1] ?? '';
     if (path.length < 2) continue;
-    const short = await route(graphOf(provider), start, target, { maxDepth: path.length - 2, budget: CHECK_BUDGET });
+    const short = await route(graphOf(provider), start, target, { maxDepth: path.length - 2, budget: CHECK_BUDGET, beam: PAR_BEAM });
     const pair = { start, target, par: short ? short.length - 1 : path.length - 1 };
     if (pair.par >= 3) return pair;
     if (!best || pair.par > best.par) best = pair;
