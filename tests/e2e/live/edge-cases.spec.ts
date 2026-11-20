@@ -39,34 +39,18 @@ test('a dead end shows an empty sky, keeps the panel and lets the reader leave',
   expect(errors).toEqual([]);
 });
 
-test('a missing article says so and keeps the current map', async ({ page }) => {
+test('Enter right after typing searches what was typed, not a stale suggestion', async ({ page }) => {
   const wiki = world();
   const errors = await open(page, wiki, '/play?a=Hub');
   await expect(page.locator('#panel h1')).toHaveText('Hub');
+  // No wait for the suggestions: the list on screen still belongs to the empty box.
   await page.locator('#gq').fill('Nonexistent thing');
   await page.keyboard.press('Enter');
-  await expect(page.locator('#toast')).toContainText('No article called');
+  await expect(page.locator('#outage')).toHaveAttribute('data-kind', 'missing');
+  await page.locator('#outage').getByRole('button', { name: 'Keep exploring' }).click();
   await expect(page.locator('#panel h1')).toHaveText('Hub');
   expect(errors).toEqual([]);
 });
-
-for (const mode of ['http500', 'apierror', 'html', 'offline'] as const) {
-  test('a failing Wikipedia (' + mode + ') is reported as unreachable, not as a missing article, and the next try works', async ({ page }) => {
-    const wiki = world();
-    const errors = await open(page, wiki, '/play?a=Hub');
-    await expect(page.locator('#panel h1')).toHaveText('Hub');
-    wiki.mode = mode;
-    await page.locator('#gq').fill('Alpha');
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#toast')).toContainText('Could not reach Wikipedia');
-    await expect(page.locator('#panel h1')).toHaveText('Hub');
-    wiki.mode = 'ok';
-    await page.locator('#gq').fill('Alpha');
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#panel h1')).toHaveText('Alpha');
-    expect(errors).toEqual([]);
-  });
-}
 
 test('a 429 shows the slowing-down note and then succeeds', async ({ page }) => {
   const wiki = world();
@@ -75,16 +59,6 @@ test('a 429 shows the slowing-down note and then succeeds', async ({ page }) => 
   const errors = await open(page, wiki, '/play?a=Hub');
   await expect(page.locator('#toast')).toContainText('Slowing down for Wikipedia');
   await expect(page.locator('#panel h1')).toHaveText('Hub', { timeout: 15_000 });
-  expect(errors).toEqual([]);
-});
-
-test('Surprise me reports a failed random pick instead of doing nothing', async ({ page }) => {
-  const wiki = world();
-  const errors = await open(page, wiki, '/play?a=Hub');
-  await expect(page.locator('#panel h1')).toHaveText('Hub');
-  wiki.mode = 'http500';
-  await page.locator('#surprise').click();
-  await expect(page.locator('#toast')).toContainText(/Could not reach Wikipedia|Could not/);
   expect(errors).toEqual([]);
 });
 

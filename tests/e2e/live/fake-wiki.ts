@@ -15,7 +15,7 @@ export interface Fake {
   calls: string[];
 }
 
-export type Mode = 'ok' | 'http500' | 'http429' | 'apierror' | 'html' | 'offline';
+export type Mode = 'ok' | 'http500' | 'http429' | 'apierror' | 'html' | 'offline' | 'hang';
 
 export class FakeWiki {
   mode: Mode = 'ok';
@@ -95,6 +95,7 @@ export class FakeWiki {
     this.calls.push(url.pathname + url.search);
     const cors = { 'access-control-allow-origin': '*' };
     if (this.mode === 'offline') return route.abort('failed');
+    if (this.mode === 'hang') return new Promise<void>(() => undefined);
     if (this.mode === 'http500') return route.fulfill({ status: 500, headers: cors, body: 'boom' });
     if (this.mode === 'http429') {
       if (this.throttled-- > 0) return route.fulfill({ status: 429, headers: { ...cors, 'retry-after': '1' }, body: 'slow down' });

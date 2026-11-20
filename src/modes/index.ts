@@ -1,9 +1,13 @@
 export { Play } from './play';
 export type { Mode, SourceCopy } from './play';
-export { par, randomPair, PAR_BUDGET, PAR_DEPTH } from './race';
-export type { Pair, Race } from './race';
+export { par, solvePar, randomPair, PAR_BUDGET, PAR_DEPTH, SOLVE_BUDGET } from './race';
+export type { Pair, Race, ParResult } from './race';
 export { Graph, graphOf, route } from './graph';
-export { dailyPair, dayOf, dayLabel } from './daily';
+export { dailyPair, dayOf, dayLabel, streak, recent, shareText, resultGrid } from './daily';
 export type { DailyPair } from './daily';
 export { chainBetween } from './connect';
 export { nextStop, DRIFT_HTML, DRIFT_MS } from './drift';
+export { scoreRun, starsText, HINT_COST } from './score';
+export type { Score, RunInput } from './score';
+export { loadStats, clearStats, streakOn, recordRun, addRun } from './stats';
+export type { Stats, RunRecord, Recorded } from './stats';

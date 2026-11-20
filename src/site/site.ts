@@ -1,7 +1,8 @@
 import type { DataProvider } from '../types';
 import { jumpTo, subjectKeyHtml } from '../styles';
 import { MiniMap } from '../engine';
-import { dailyPair, par, type Play } from '../modes';
+import { clearStats, dailyPair, loadStats, par, type Play } from '../modes';
+import { statsHtml } from './stats';
 import { articleOf, dispatchPlayLink, isRouteName, pathOf, racePairOf, routeOf, type RouteName } from './router';
 
 /** The article at the centre of the main page's small map. */
@@ -9,7 +10,7 @@ const TODAY = 'Architecture';
 /** How many stars the small map shows. */
 const MINI_STARS = 70;
 
-const SITE_PAGES: RouteName[] = ['main-page'];
+const SITE_PAGES: RouteName[] = ['main-page', 'stats'];
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -72,7 +73,7 @@ export class Site {
     const pair = racePairOf(location.search);
     const article = articleOf(location.search);
     const query = new URLSearchParams(location.search);
-    if (query.has('daily')) void this.play.startDaily();
+    if (query.has('daily')) void this.play.startDaily(query.get('daily') === 'hard');
     else if (query.has('connect')) void this.play.startConnect();
     else if (pair) void this.play.startRace(pair.start, pair.target);
     else if (article) void this.play.open(article);
@@ -95,11 +96,17 @@ export class Site {
         if (p === name) tab.setAttribute('aria-current', 'page');
         else tab.removeAttribute('aria-current');
       }
+      if (name === 'stats') this.renderStats();
       window.scrollTo(0, 0);
       this.menu(false);
       this.play.leave();
     } else if (was !== 'play' || !this.play.engine.running) this.play.enter();
     this.miniTick();
+  }
+
+  /** Fill the stats page from what this browser has kept. */
+  private renderStats(): void {
+    $('statsBody').innerHTML = statsHtml(loadStats());
   }
 
   /** Open or close the side menu. It only folds away on narrow screens. */
@@ -149,24 +156,28 @@ export class Site {
       else if (d.random) setTimeout(() => void this.play.surprise(), 30);
       else if (topic) setTimeout(() => void this.play.open(topic), 30);
     });
+    $('statsBody').addEventListener('click', (e) => {
+      if (!(e.target as HTMLElement).closest('#statsReset')) return;
+      clearStats();
+      this.renderStats();
+    });
     $('menuBtn').addEventListener('click', () => this.menu(!$('vside').classList.contains('open')));
     $('vsearch').addEventListener('submit', (e) => {
       e.preventDefault();
       const typed = $<HTMLInputElement>('vq').value.trim();
       this.go('play');
       if (!typed) return;
-      void this.provider.suggest(typed).then(
-        (found) => {
-          const hit = found[0];
-          if (hit) void this.play.open(hit.title);
-          else {
-            this.play.setMode('explore');
-            this.play.missing(typed);
-          }
-        },
-        // A failed search is not a missing article.
-        () => this.play.toast('Could not reach Wikipedia just now. Try again in a moment.'),
-      );
+      const search = async (): Promise<void> => {
+        const hit = (await this.provider.suggest(typed))[0];
+        this.play.clearOutage();
+        if (hit) void this.play.open(hit.title);
+        else {
+          this.play.setMode('explore');
+          this.play.missing(typed);
+        }
+      };
+      // A failed search is not a missing article: it gets the screen for why Wikipedia could not be reached.
+      search().catch((err: unknown) => void this.play.report(err, search, typed));
     });
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && !this.onMap) this.miniTick();

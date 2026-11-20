@@ -12,6 +12,7 @@ test('a race can be finished, run again and replaced with a new one', async ({ p
   await expect(hud).toContainText('Arrived at Jazz');
   await expect(hud).toContainText('1 click');
   await expect(hud).toHaveClass(/win/);
+  await expect(hud).toContainText('Shortest route: Brutalist architecture →');
 
   await hud.locator('#retry').click();
   await expect(hud).toContainText('Brutalist architecture → Jazz');
@@ -107,4 +108,42 @@ test('an empty Connect two field offers the map’s best next stars', async ({ p
   await page.locator('#hud input[name="to"]').focus();
   await expect(page.locator('#clist option').first()).toHaveAttribute('label', /tie/);
   expect(await page.locator('#clist option').count()).toBeGreaterThanOrEqual(5);
+});
+
+test('race rules restart the race, Reveal names a route, and the no-places rule blocks a place star', async ({ page }) => {
+  await page.goto('/play?race=Brutalist%20architecture|Jazz');
+  const hud = page.locator('#hud');
+  await expect(hud).toContainText('par 4');
+  await hud.locator('[data-rule="blitz"]').click();
+  await expect(hud.locator('#rt')).toHaveText(/01:(30|29)/);
+  await expect(hud.locator('[data-rule="blitz"]')).toHaveAttribute('aria-pressed', 'true');
+  await hud.locator('#reveal').click();
+  await expect(hud.locator('.note')).toContainText(/route of \d clicks? exists|No short route/);
+  await hud.locator('[data-rule="blitz"]').click();
+  await expect(hud.locator('#rt')).toHaveText('00:00');
+});
+
+test('the hard daily hides the hint, finishes with a streak and copies a share result', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/play?daily=hard');
+  const hud = page.locator('#hud');
+  await expect(hud).toContainText('Daily constellation');
+  await expect(hud).toContainText('hard');
+  await expect(hud.locator('.hint')).toHaveCount(0);
+  await expect(hud.locator('#dtoggle')).toHaveText('Normal version');
+  const target = (await hud.locator('.line em').textContent()) ?? '';
+  await page.locator('#gq').fill(target);
+  await expect(page.locator('#gsugg li').first()).toContainText(target);
+  await page.keyboard.press('Enter');
+  await expect(hud).toContainText('Arrived at ' + target);
+  await expect(hud).toContainText('1 day in a row');
+  await expect(hud.locator('.cal i')).toHaveCount(28);
+  await hud.locator('#share').click();
+  const text = await page.evaluate(() => navigator.clipboard.readText());
+  expect(text).toContain('(hard)');
+  expect(text).toContain('⭐');
+  expect(text).not.toContain(target);
+  await hud.locator('#dtoggle').click();
+  await expect(hud.locator('.hint, .line em')).not.toHaveCount(0);
+  await expect(hud).not.toContainText('hard');
 });
