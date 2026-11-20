@@ -1,7 +1,7 @@
 /** The three surfaces of Astris and the path each lives at. */
-export type RouteName = 'main-page' | 'design-system' | 'play';
+export type RouteName = 'main-page' | 'play';
 
-const PATHS: Record<RouteName, string> = { 'main-page': '/', 'design-system': '/design-system', play: '/play' };
+const PATHS: Record<RouteName, string> = { 'main-page': '/', play: '/play' };
 
 export function isRouteName(name: string): name is RouteName {
   return name in PATHS;

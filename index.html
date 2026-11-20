@@ -28,7 +28,7 @@
       <button type="submit">Search</button>
     </form>
     <nav class="vlinks" aria-label="Site">
-      <a href="/play" data-go="play">Play</a><a href="/play?daily=1" data-race="1">Today's race</a><a href="/design-system" data-go="design-system">Design system</a>
+      <a href="/play" data-go="play">Play</a><a href="/play?daily=1" data-race="1">Today's race</a>
     </nav>
   </header>
 
@@ -39,12 +39,12 @@
       <h3>Modes</h3>
       <ul><li><a href="/play" data-go="play">Explore</a></li><li><a href="/play?daily=1" data-race="1">Race</a></li><li><a href="/play?connect=1" data-connect="1">Connect two</a></li><li><a href="/play?daily=1" data-race="1">Daily constellation</a></li><li><a href="/play?drift=1" data-drift="1">Drift</a></li></ul>
       <h3>Project</h3>
-      <ul><li><a href="/design-system" data-go="design-system">Design system</a></li><li><a href="https://www.wikipedia.org/">Wikipedia</a></li></ul>
+      <ul><li><a href="https://www.wikipedia.org/">Wikipedia</a></li></ul>
     </nav>
 
     <main class="vmain">
       <div class="vtabs">
-        <div><button type="button" data-go="main-page" id="tab-main-page">Main Page</button><button type="button" data-go="design-system" id="tab-design-system">Design system</button></div>
+        <div><button type="button" data-go="main-page" id="tab-main-page">Main Page</button></div>
         <div><button type="button" aria-current="page">Read</button><button type="button" data-go="play">Play</button></div>
       </div>
 
@@ -98,73 +98,12 @@
         </div>
       </section>
 
-      <!-- DESIGN SYSTEM -->
-      <section class="page" id="page-design-system">
-        <h1>Astris design system</h1>
-        <div class="sub">From Astris, the map of Wikipedia</div>
-        <div class="infobox">
-          <div class="cap">Astris</div>
-          <div class="hero"><span class="logo">Astr<span class="i">&#305;<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M30 0 Q33 27 60 30 Q33 33 30 60 Q27 33 0 30 Q27 27 30 0 Z" fill="url(#lgn)"/></svg></span>s</span></div>
-          <dl><dt>Version</dt><dd>1</dd><dt>Worlds</dt><dd>Encyclopedia (site), Space (game)</dd><dt>Themes</dt><dd>Site follows light or dark. Game is always night.</dd><dt>Bridge</dt><dd>The logo and the link colors appear in both.</dd></dl>
-        </div>
-        <p>The <b>Astris design system</b> has two halves. Everything around the game looks and reads like an encyclopedia: a header with search, a side menu, tabs, bordered boxes, serif headings on a hairline rule, and blue links. The game itself is open space, where the same articles become stars.</p>
-        <div class="hat">This page is itself built from the system it describes.</div>
-        <div class="toc"><b>Contents</b><ol><li><a href="#ds-colour" data-scroll="ds-colour">Colour</a></li><li><a href="#ds-type" data-scroll="ds-type">Type</a></li><li><a href="#ds-links" data-scroll="ds-links">Links</a></li><li><a href="#ds-parts" data-scroll="ds-parts">Parts</a></li><li><a href="#ds-space" data-scroll="ds-space">Space</a></li><li><a href="#ds-motion" data-scroll="ds-motion">Motion</a></li></ol></div>
-
-        <h2 id="ds-colour">Colour <span class="edit">[encyclopedia]</span></h2>
-        <div class="swatches">
-          <div><i style="background:var(--surface)"></i>Paper<br><code>--surface</code></div><div><i style="background:var(--page)"></i>Chrome<br><code>--page</code></div>
-          <div><i style="background:var(--tint)"></i>Box header<br><code>--tint</code></div><div><i style="background:var(--ink)"></i>Ink<br><code>--ink</code></div>
-          <div><i style="background:var(--link)"></i>Link<br><code>--link</code></div><div><i style="background:var(--visited)"></i>Visited<br><code>--visited</code></div><div><i style="background:var(--redlink)"></i>Missing<br><code>--redlink</code></div>
-        </div>
-        <h2>Colour <span class="edit">[space]</span></h2>
-        <div class="swatches">
-          <div><i style="background:var(--night)"></i>Night<br><code>--night</code></div><div><i style="background:var(--starlight)"></i>Starlight<br><code>--starlight</code></div>
-          <div><i style="background:var(--neb-blue)"></i>Nebula blue<br><code>--neb-blue</code></div><div><i style="background:var(--neb-violet)"></i>Nebula violet<br><code>--neb-violet</code></div><div><i style="background:var(--neb-rose)"></i>Nebula rose<br><code>--neb-rose</code></div>
-          <div><i style="background:linear-gradient(90deg,var(--neb-blue),var(--neb-violet),var(--neb-rose))"></i>Nebula sweep<br><code>blue → violet → rose</code></div>
-        </div>
-        <p>The sweep is used sparingly on the site: one thin line under the welcome box and the stripe on box headers. In space it is the light itself.</p>
-
-        <h2 id="ds-type">Type</h2>
-        <table class="wt">
-          <tr><th>Role</th><th>Face</th><th>Specimen</th></tr>
-          <tr><td>Headings, article titles, search results</td><td>Linux Libertine, then Georgia</td><td style="font-family:var(--serif);font-size:24px">Brutalist architecture</td></tr>
-          <tr><td>Body, menus, buttons</td><td>The reader's system sans-serif</td><td>Each article links to the other.</td></tr>
-          <tr><td>Logo only</td><td>Source Serif 4 Semibold</td><td><span class="logo" style="font-size:24px">Astris</span></td></tr>
-          <tr><td>Counters, timers, keys</td><td>IBM Plex Mono</td><td class="mono">3 clicks · 00:21 · par 3</td></tr>
-        </table>
-
-        <h2 id="ds-links">Links</h2>
-        <p>Link colour always means the same thing, on the site and on the map: <a>an article that exists</a>, <a class="visited">one you have already visited</a>, and <a class="new">one that does not exist yet</a>. Links are never underlined until hovered.</p>
-
-        <h2 id="ds-parts">Parts</h2>
-        <div class="demo"><button class="btn go" type="button">Primary action</button><button class="btn" type="button">Secondary</button><span class="tag live">live</span><span class="tag">planned</span>
-          <span class="vsearch" style="max-width:260px"><input type="search" placeholder="Search field" aria-label="Example search field"><button type="button">Search</button></span></div>
-        <p>Boxes have square corners, a one-pixel border and a tinted header. Nothing on the site casts a shadow or glows. Glow belongs to space.</p>
-
-        <h2 id="ds-space">Space</h2>
-        <div class="spacecard">
-          <span class="logo" style="color:var(--starlight);font-size:34px">Astr<span class="i">&#305;<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M30 0 Q33 27 60 30 Q33 33 30 60 Q27 33 0 30 Q27 27 30 0 Z" fill="url(#lgn)"/></svg></span>s</span>
-          <span class="dots" id="topicDots"></span>
-          <span style="font-size:13px;color:var(--dust);max-width:44ch">Stars are light, not shapes. Colour is the subject. Brightness and size carry the rank. Threads are thin and additive, so where many cross, the map gets brighter.</span>
-        </div>
-
-        <h2 id="ds-motion">Motion</h2>
-        <table class="wt">
-          <tr><th>Moment</th><th>What moves</th><th>Time</th></tr>
-          <tr><td>A constellation grows</td><td>Stars bloom outward from the centre, each thread drawing just before its star lands</td><td class="mono">1.4 s</td></tr>
-          <tr><td>Travel</td><td>The chosen star stays put and becomes the centre. A ring of light sweeps out from it: old stars dissolve ahead of the ring, new ones appear behind it. The old constellation shrinks and slides aside as a faint memory.</td><td class="mono">1.2 s</td></tr>
-          <tr><td>Idle</td><td>Stars twinkle out of step. Points of light run along threads toward the centre.</td><td class="mono">always</td></tr>
-          <tr><td>Logo</td><td>The star over the i makes a quarter turn</td><td class="mono">every 7 s</td></tr>
-        </table>
-        <p>Anyone with reduced motion turned on gets the finished picture with no growth, flight or twinkle.</p>
-      </section>
     </main>
 
     <footer class="vfoot">
       <div>Astris is built on <a href="https://www.wikipedia.org/">Wikipedia</a>. Article text comes from Wikipedia and is available under the <a href="https://creativecommons.org/licenses/by-sa/4.0/" rel="license">Creative Commons Attribution-ShareAlike 4.0</a> licence; every summary links to its article. Thumbnails come from Wikimedia Commons under their own licences, credited on the article they link to.</div>
       <div>Astris is an independent project. It is not affiliated with or endorsed by the Wikimedia Foundation.</div>
-      <ul><li><a href="/" data-go="main-page">Main page</a></li><li><a href="/play" data-go="play">Open the map</a></li><li><a href="/design-system" data-go="design-system">Design system</a></li><li><a href="https://www.wikipedia.org/">Wikipedia</a></li></ul>
+      <ul><li><a href="/" data-go="main-page">Main page</a></li><li><a href="/play" data-go="play">Open the map</a></li><li><a href="https://www.wikipedia.org/">Wikipedia</a></li></ul>
     </footer>
   </div>
 </div>

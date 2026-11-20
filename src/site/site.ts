@@ -1,5 +1,5 @@
 import type { DataProvider } from '../types';
-import { prefersReducedMotion, subjectDotsHtml, subjectKeyHtml } from '../styles';
+import { prefersReducedMotion, subjectKeyHtml } from '../styles';
 import { MiniMap } from '../engine';
 import { dailyPair, par, type Play } from '../modes';
 import { articleOf, dispatchPlayLink, isRouteName, pathOf, racePairOf, routeOf, type RouteName } from './router';
@@ -9,7 +9,7 @@ const TODAY = 'Architecture';
 /** How many stars the small map shows. */
 const MINI_STARS = 70;
 
-const SITE_PAGES: RouteName[] = ['main-page', 'design-system'];
+const SITE_PAGES: RouteName[] = ['main-page'];
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -28,7 +28,6 @@ export class Site {
   ) {
     this.bind();
     $('topicKey').innerHTML = subjectKeyHtml();
-    $('topicDots').innerHTML = subjectDotsHtml();
     // Today's race is the daily pair: the same two articles for every visitor until midnight UTC.
     const today = dailyPair();
     document.querySelectorAll<HTMLElement>('.race a').forEach((a, i) => {
