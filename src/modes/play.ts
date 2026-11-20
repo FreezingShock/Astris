@@ -3,7 +3,7 @@ import { esc } from '../lib';
 import { replay, subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
 import { Atlas, Collection } from '../sky';
-import { Discovery, Share, Tip, firstLine, initKeyboard } from '../comforts';
+import { Celebration, Discovery, Share, Sound, Tip, Tour, firstLine, initKeyboard, tierOf } from '../comforts';
 import { Connect, connectHtml, type ConnectState } from './connect';
 import { dailyPair, recent, saveDaily, shareText, streak } from './daily';
 import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
@@ -52,6 +52,9 @@ export class Play {
   private atlas: Atlas | null = null;
   private readonly tip: Tip;
   private readonly share: Share;
+  private readonly sound = new Sound();
+  private readonly fx: Celebration;
+  private readonly tour: Tour;
   private seq = 0;
   private driftTimer = 0;
   private driftSeen: string[] = [];
@@ -106,6 +109,8 @@ export class Play {
       onMap: this.isOpen,
       toast: (message) => this.toast(message),
     });
+    this.fx = new Celebration($('play'));
+    this.tour = new Tour({ host: $('play'), canvas: $('sky'), search: this.gq, onRace: () => void this.newRace() });
     this.connect = new Connect({
       provider: this.provider,
       current: () => this.engine.current?.title ?? null,
@@ -132,6 +137,8 @@ export class Play {
     this.engine.enable();
     this.share.sync();
     if (!this.engine.current) void this.open(DEFAULT_ARTICLE, false);
+    // The tutorial greets a first visit to the plain map, never a shared link.
+    if (!this.tour.seen && !this.tour.open && !location.search) this.tour.start();
   }
 
   /** The map route closed. */
@@ -436,6 +443,8 @@ export class Play {
   }
 
   private travelled(title: string, now: number): void {
+    this.sound.arrive(title);
+    this.tour.advance('travel');
     const race = this.race;
     if (!race || race.done) return;
     if (stepRace(race, title, now)) {
@@ -447,8 +456,17 @@ export class Play {
         race.calendar = recent(race.day);
       }
       this.prepare();
+      this.celebrate(race);
     }
     this.hud();
+  }
+
+  /** A burst of stars and a rising chime when a race ends; a better finish makes more of both. */
+  private celebrate(race: Race): void {
+    const tier = tierOf(race.clicks, race.par);
+    this.sound.win(tier);
+    this.hud();
+    this.fx.burst(tier, $('hud'), this.engine.current?.subject ?? 'Other');
   }
 
   private connectCard(state: ConnectState | null): void {
@@ -594,6 +612,18 @@ export class Play {
     this.atlas = atlas;
     $('skyBtn').addEventListener('click', () => (atlas.isOpen ? atlas.close() : atlas.open()));
     $('surprise').addEventListener('click', () => void this.surprise());
+    const snd = $('snd');
+    const paintSound = (): void => {
+      snd.setAttribute('aria-pressed', String(this.sound.enabled));
+      snd.title = this.sound.enabled ? 'Sound is on' : 'Sound is off';
+      snd.setAttribute('aria-label', snd.title);
+    };
+    paintSound();
+    snd.addEventListener('click', () => {
+      this.sound.set(!this.sound.enabled);
+      paintSound();
+    });
+    $('tourbtn').addEventListener('click', () => this.tour.start());
     $('zin').addEventListener('click', () => engine.zoomBy(1.4));
     $('zout').addEventListener('click', () => engine.zoomBy(1 / 1.4));
     $('zfit').addEventListener('click', () => engine.fit());
