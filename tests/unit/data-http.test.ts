@@ -153,3 +153,17 @@ describe('Http back-off', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('API error bodies', () => {
+  it('rejects a 200 reply that carries an error and does not cache it', async () => {
+    let n = 0;
+    const fetchFn = (() => {
+      n++;
+      const body = n === 1 ? { error: { code: 'internal_api_error' } } : { ok: true };
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+    }) as unknown as typeof fetch;
+    const http = new Http({ fetch: fetchFn, storage: null });
+    await expect(http.getJson('https://x/y')).rejects.toMatchObject({ name: 'ApiError' });
+    await expect(http.getJson('https://x/y')).resolves.toEqual({ ok: true });
+  });
+});

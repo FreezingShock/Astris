@@ -167,14 +167,17 @@ export class Site {
       const typed = $<HTMLInputElement>('vq').value.trim();
       this.go('play');
       if (!typed) return;
-      void this.provider.suggest(typed).then((found) => {
-        const hit = found[0];
+      const search = async (): Promise<void> => {
+        const hit = (await this.provider.suggest(typed))[0];
+        this.play.clearOutage();
         if (hit) void this.play.open(hit.title);
         else {
           this.play.setMode('explore');
           this.play.missing(typed);
         }
-      });
+      };
+      // A failed search is not a missing article: it gets the screen for why Wikipedia could not be reached.
+      search().catch((err: unknown) => void this.play.report(err, search, typed));
     });
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && !this.onMap) this.miniTick();

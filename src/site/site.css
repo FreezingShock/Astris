@@ -1,6 +1,10 @@
 /* ============ THE SITE: a quiet night-sky shell around the map ============ */
 body[data-view='site'] {
-  background: var(--page) var(--wash) no-repeat fixed;
+  /* The wash is several gradients, so the colour cannot share a shorthand with it: a colour in any layer but the last voids the whole rule. */
+  background-color: var(--page);
+  background-image: var(--wash);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 #site {
   min-height: 100%;
@@ -460,6 +464,10 @@ body[data-view='site'] {
   border-top: 1px solid var(--glass-line);
   font-size: 12.5px;
   color: var(--muted);
+}
+.vfoot div a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .vfoot div + div {
   margin-top: 6px;
