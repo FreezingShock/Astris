@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ArticleNotFoundError, MAX_STARS, WikipediaProvider, rankOf } from '../../src/data';
-import { namesMatch } from '../../src/data/wikipedia';
+import { lengthBonus, namesMatch } from '../../src/data/wikipedia';
 
-type Row = { title: string; description?: string; index?: number; ns?: number };
+type Row = { title: string; description?: string; index?: number; ns?: number; length?: number };
 interface World {
   /** Redirects and the centre page: asked title to real title. */
   pages: Record<string, { title: string; description?: string; categories?: string[] }>;
@@ -131,6 +131,19 @@ describe('WikipediaProvider.constellation', () => {
     expect(con.stars.some((s) => s.title.startsWith('Out C') || s.title.startsWith('In C') || s.title === 'Big Bang')).toBe(false);
     expect(calls.filter((u) => u.searchParams.get('generator') === 'links')).toHaveLength(2);
     expect(calls.filter((u) => u.searchParams.get('generator') === 'linkshere')).toHaveLength(2);
+  });
+
+  it('breaks ties inside a rank with article length, not the alphabet', async () => {
+    const { provider, calls } = wiki({
+      pages: { Hub: { title: 'Hub' } },
+      links: [[{ title: 'Aardvark stub', length: 900 }, { title: 'Middling', length: 20_000 }, { title: 'Zebra epic', length: 180_000 }, { title: 'No size' }]],
+    });
+    const con = await provider.constellation('Hub');
+    expect(con.stars.map((s) => s.title)).toEqual(['Zebra epic', 'Middling', 'Aardvark stub', 'No size']);
+    expect(calls.find((u) => u.searchParams.get('generator') === 'links')?.searchParams.get('prop')).toBe('description|info');
+    expect(lengthBonus(0)).toBe(0);
+    expect(lengthBonus(1e9)).toBe(4);
+    expect(lengthBonus(100_000)).toBeLessThan(5); // never outweighs a shared subject
   });
 
   it('rejects a missing article with ArticleNotFoundError, and neighbours answers with nothing', async () => {
