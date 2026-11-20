@@ -443,3 +443,12 @@ describe('what the search box offers when empty', () => {
     ]);
   });
 });
+
+describe('the race card hint', () => {
+  it('shows a line about the target while the race runs', () => {
+    const race = beginRace('A', 'B', 3, 0);
+    expect(hudHtml(race)).not.toContain("class='hint'");
+    race.hint = 'A river in <Spain>.';
+    expect(hudHtml(race)).toContain("<div class='hint'>A river in &lt;Spain&gt;.</div>");
+  });
+});

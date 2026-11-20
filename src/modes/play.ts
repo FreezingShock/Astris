@@ -2,7 +2,7 @@ import type { ArticleSummary, Constellation, DataProvider, Suggestion } from '..
 import { clock, esc } from '../lib';
 import { replay, subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
-import { Discovery, Share, Tip, initKeyboard } from '../comforts';
+import { Discovery, Share, Tip, firstLine, initKeyboard } from '../comforts';
 import { Connect, connectHtml, type ConnectState } from './connect';
 import { dailyPair, saveDaily } from './daily';
 import { DRIFT_MS, nextStop } from './drift';
@@ -183,9 +183,12 @@ export class Play {
     this.hud();
     void this.provider.summary(target).then(
       (s) => {
-        if (this.race !== race || race.done || !s.title || s.title === race.target) return;
-        race.target = s.title;
-        this.engine.markerTitle = s.title;
+        if (this.race !== race || race.done) return;
+        if (s.title && s.title !== race.target) {
+          race.target = s.title;
+          this.engine.markerTitle = s.title;
+        }
+        race.hint = firstLine(s.extract, 90);
         this.hud();
       },
       () => undefined,
