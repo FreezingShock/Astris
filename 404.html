@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lost in space: Astris</title>
+    <meta name="description" content="That page is not on the Astris map." />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#07080c" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/src/styles/fonts.css" />
+    <link rel="stylesheet" href="/src/styles/tokens.css" />
+    <link rel="stylesheet" href="/src/styles/notfound.css" />
+  </head>
+  <body>
+    <main class="lost">
+      <svg class="star" viewBox="0 0 60 60" aria-hidden="true">
+        <defs>
+          <radialGradient id="lgn">
+            <stop offset="0" style="stop-color: var(--logo-night-core)" />
+            <stop offset=".36" style="stop-color: var(--logo-night-mid)" />
+            <stop offset="1" style="stop-color: var(--logo-night-edge)" />
+          </radialGradient>
+        </defs>
+        <path d="M30 0 Q33 27 60 30 Q33 33 30 60 Q27 33 0 30 Q27 27 30 0 Z" fill="url(#lgn)" />
+      </svg>
+      <p class="code">404</p>
+      <h1>This star is not on the map</h1>
+      <p class="sub">The page you asked for does not exist, or it drifted away. Every real route starts from the main page.</p>
+      <p class="actions"><a class="btn go" href="/">Back to the main page</a><a class="btn" href="/play">Open the map</a></p>
+    </main>
+  </body>
+</html>

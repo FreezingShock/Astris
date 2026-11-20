@@ -1,11 +1,20 @@
 import type { Constellation } from '../types';
-import { ease, hash } from '../lib';
+import { ease } from '../lib';
 import { prefersReducedMotion, token } from '../styles';
 import { CONFIG } from './config';
-import { drawCon } from './draw';
+import { drawCon, zoomSize } from './draw';
 import { makeCon } from './layout';
 import type { Camera, Con, PickTarget, Point, StarNode } from './model';
-import { sprites, type Sprites } from './sprites';
+import { pixelRatio, sprites, type Sprites } from './sprites';
+import { World } from './world';
+
+const TAU = Math.PI * 2;
+
+/** How far the view must move, in screen pixels, for a point to sit at least `margin` inside it. */
+export function nudgeIntoView(p: Point, width: number, height: number, margin: number): Point {
+  const along = (v: number, size: number): number => (v < margin ? v - margin : v > size - margin ? v - (size - margin) : 0);
+  return { x: along(p.x, width), y: along(p.y, height) };
+}
 
 export interface FrameStats {
   /** Stars drawn this frame, across the live constellation and its memories. */
@@ -28,7 +37,9 @@ export interface EngineEvents {
 }
 
 /**
- * The map. It takes Constellation data and draws it: layout, bloom, travel, memories and input.
+ * The map. It takes Constellation data and draws it: layout, bloom, travel and input.
+ * Travelling grows the map: the chosen star becomes the centre and its neighbours are added around it,
+ * next to everything visited before, instead of replacing it.
  * It never fetches anything itself.
  */
 export class Engine {
@@ -40,6 +51,16 @@ export class Engine {
   trail: string[] = [];
   /** A star to ring with a dashed marker, used by Race for its target. */
   markerTitle: string | null = null;
+  /** The time one frame spends drawing, smoothed, in milliseconds. */
+  get frameMs(): number {
+    return this.cost;
+  }
+
+  /** Detail now being drawn, 0 (everything) to lodMax. */
+  get detail(): number {
+    return this.lod;
+  }
+
   /** True while the frame loop runs. */
   running = false;
 
@@ -48,18 +69,32 @@ export class Engine {
   private readonly reduce = prefersReducedMotion();
   private readonly colors: { white: string; trail: string; title: string; strong: string; soft: string; visited: string };
   private cons: Con[] = [];
+  private readonly world = new World(CONFIG.starGap);
   private readonly cam: Camera = { x: 0, y: 0, z: 1 };
   private readonly tgt: Camera = { x: 0, y: 0, z: 1 };
   private raf = 0;
   private last = 0;
   private enabled = false;
   private hover: StarNode | null = null;
+  private ratio = 1;
   private W = 0;
   private H = 0;
   private readonly ptrs = new Map<number, Point>();
   private moved = 0;
   private lastP: Point = { x: 0, y: 0 };
   private pinch = 0;
+  /** Drawing detail 0 to lodMax, and the smoothed time one frame spends drawing. */
+  private lod = 0;
+  private last0 = 0;
+  private calm = 0;
+  /** Share of the screen's pixel ratio drawn at, lowered when even the lowest detail is too slow. */
+  private shrink = 1;
+  private cost = 0;
+  private hold = 0;
+  /** Pan velocity in map units per millisecond, for the glide after a drag. */
+  private vel: Point = { x: 0, y: 0 };
+  private velAt = 0;
+  private moving = 0;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -80,9 +115,14 @@ export class Engine {
     this.bindPointer();
   }
 
-  /** Memories still on the map, oldest first. */
+  /** Every other constellation on the map, oldest first. */
   get memories(): Con[] {
     return this.cons.filter((c) => c !== this.current && !c.gone);
+  }
+
+  /** Stars on the map, counting each article once. */
+  get starCount(): number {
+    return this.world.size;
   }
 
   /** Allow the loop to run and fit the view. Called when the map route opens. */
@@ -90,7 +130,7 @@ export class Engine {
     this.enabled = true;
     this.resize();
     if (this.current) {
-      this.tgt.z = this.fitZ();
+      this.tgt.z = this.fitZ(this.current);
       this.kick();
     }
   }
@@ -117,7 +157,8 @@ export class Engine {
 
   resize(): void {
     const r = this.canvas.getBoundingClientRect();
-    const d = Math.min(CONFIG.maxPixelRatio, window.devicePixelRatio || 1);
+    const d = pixelRatio() * this.shrink;
+    this.ratio = d;
     this.W = r.width;
     this.H = r.height;
     this.canvas.width = Math.round(this.W * d);
@@ -128,86 +169,52 @@ export class Engine {
   /** Throw the map away and grow one constellation at the origin. */
   reset(data: Constellation): void {
     const now = performance.now();
+    this.world.clear();
     const con = makeCon(data, 0, 0, now, 0);
+    this.settle(con);
     this.cons = [con];
     this.current = con;
     this.trail = [con.title];
     this.visited.clear();
-    this.tgt.z = this.fitZ();
+    this.tgt.z = this.fitZ(con);
     this.tgt.x = this.focusOffset();
     this.tgt.y = 0;
     this.cam.x = this.tgt.x;
     this.cam.y = this.tgt.y;
-    this.cam.z = this.tgt.z * 0.82;
+    this.cam.z = this.tgt.z * CONFIG.resetZoom;
     this.events.onChange?.(con);
     this.kick();
   }
 
   /**
    * Travel: the chosen star stays exactly where it is and becomes the new centre.
-   * Everything else dissolves outward from it. The old constellation shrinks,
-   * slides out of the way and stays behind as a faint memory.
+   * Its neighbours are added around it and everything already on the map stays.
+   * A star that is already on the map is not added again; the new centre only threads to it.
+   * Travelling to a centre visited before just moves the view there.
    */
   travel(data: Constellation): void {
     const from = this.current;
     const title = data.center.title;
     if (!from || title === from.title) return;
     const now = performance.now();
-    const star = from.nodes.find((n) => n.title === title);
-    const memory = this.memories.find((c) => c.title === title);
-    let wx = from.x;
-    let wy = from.y;
-    if (star) {
-      wx = from.x + star.dx * from.sc;
-      wy = from.y + star.dy * from.sc;
-    } else if (memory) {
-      wx = memory.x;
-      wy = memory.y;
-    }
     this.visited.add(from.title);
-    for (const c of this.cons) {
-      if (c.gone) continue;
-      if (c.title === title) {
-        c.dimT = 0;
-        c.gone = true;
-        continue;
-      }
-      const dx = c.x - wx;
-      const dy = c.y - wy;
-      const d = Math.hypot(dx, dy);
-      const a = d < 1 ? (hash(c.title + title) % 628) / 100 : Math.atan2(dy, dx);
-      const far = Math.max(d, CONFIG.memoryDistance);
-      c.gm = { t0: now, x0: c.x, y0: c.y, x1: wx + Math.cos(a) * far, y1: wy + Math.sin(a) * far, s0: c.sc, s1: c === from ? CONFIG.memoryScale : c.sc * CONFIG.olderMemoryScale };
-      if (!c.ghost) {
-        c.ghost = { t0: now };
-        c.dimT = CONFIG.memoryDim;
-        c.pulses = [];
-        for (const n of c.nodes) {
-          const nx = c.x + n.dx * c.sc - wx;
-          const ny = c.y + n.dy * c.sc - wy;
-          const nd = Math.hypot(nx, ny) || 1;
-          n.gd = Math.min(1, nd / CONFIG.dissolveReach) * CONFIG.dissolveSpreadMs;
-          n.gux = nx / nd;
-          n.guy = ny / nd;
-        }
-      } else c.dimT *= CONFIG.olderMemoryDim;
+    let con = this.cons.find((c) => c.title === title && !c.gone);
+    if (!con) {
+      const at = this.world.get(title) ?? { x: from.x, y: from.y };
+      con = makeCon(data, at.x, at.y, now, 0);
+      con.sc = CONFIG.childScale;
+      this.clear(con);
+      this.settle(con);
+      this.cons.push(con);
     }
-    const ghosts = this.cons.filter((c) => c.ghost && !c.gone);
-    while (ghosts.length > CONFIG.maxMemories) {
-      const old = ghosts.shift();
-      if (old) {
-        old.dimT = 0;
-        old.gone = true;
-      }
-    }
-    const con = makeCon(data, wx, wy, now, 0);
-    this.cons.push(con);
     this.current = con;
     this.trail.push(title);
     if (this.trail.length > CONFIG.trailLength) this.trail.shift();
-    this.tgt.z = this.fitZ();
-    this.tgt.x = wx + this.focusOffset();
-    this.tgt.y = wy;
+    this.trim(con);
+    const fit = this.fitZ(con);
+    this.tgt.z = Math.max(fit * CONFIG.keepZoomLow, Math.min(fit * CONFIG.keepZoomHigh, this.tgt.z));
+    this.tgt.x = con.x + this.focusOffset();
+    this.tgt.y = con.y;
     this.hover = null;
     this.events.onHover?.(null, { x: 0, y: 0 }, this.W, this.H);
     this.events.onTravel?.(title, now);
@@ -224,10 +231,32 @@ export class Engine {
   fit(): void {
     const cur = this.current;
     if (!cur) return;
-    this.tgt.z = this.fitZ();
+    this.tgt.z = this.fitZ(cur);
     this.tgt.x = cur.x + this.focusOffset();
     this.tgt.y = cur.y;
     this.kick();
+  }
+
+  /**
+   * Ring a star of the live constellation as if the pointer were over it, for keyboard travel.
+   * Null clears the ring. Returns true when a star was ringed.
+   * A star near the edge of the view is brought inside it.
+   */
+  highlight(title: string | null): boolean {
+    const node = title === null ? undefined : this.current?.nodes.find((n) => n.title === title && n.on && n.a >= CONFIG.pickMinGrow);
+    if (!node) {
+      this.hover = null;
+      this.events.onHover?.(null, { x: 0, y: 0 }, this.W, this.H);
+      this.kick();
+      return false;
+    }
+    this.hover = node;
+    const shift = nudgeIntoView({ x: node.sx, y: node.sy }, this.W, this.H, CONFIG.highlightMargin);
+    this.tgt.x += shift.x / this.cam.z;
+    this.tgt.y += shift.y / this.cam.z;
+    this.events.onHover?.({ kind: 'star', node }, { x: node.sx, y: node.sy }, this.W, this.H);
+    this.kick();
+    return true;
   }
 
   /** Forget measured label widths, for when a web font finishes loading. */
@@ -236,9 +265,105 @@ export class Engine {
     for (const n of this.current.nodes) n.wb = n.ws = undefined;
   }
 
-  private fitZ(): number {
+  private fitZ(con?: Con | null): number {
     const pw = this.W > CONFIG.wideScreen ? CONFIG.panelWidth : 0;
-    return Math.max(CONFIG.fitMin, Math.min(CONFIG.fitMax, Math.min(this.W - pw - 60, this.H - 150) / 800));
+    const fit = Math.min(this.W - pw - CONFIG.fitMarginX, this.H - CONFIG.fitMarginY) / (CONFIG.fitSpan * (con?.sc ?? 1));
+    return Math.max(CONFIG.fitMin, Math.min(CONFIG.fitMax, fit));
+  }
+
+  /**
+   * Make clean room for a new constellation: every star and thread inside the area it will occupy is removed,
+   * except the centres already visited and the race target. A star outside the area stays, and the new
+   * constellation threads to it when it names the same article.
+   */
+  private clear(con: Con): void {
+    const R = CONFIG.rMax * con.sc * CONFIG.clearShare;
+    const keep = new Set<string>(this.cons.map((c) => c.title));
+    keep.add(con.title);
+    if (this.markerTitle) keep.add(this.markerTitle);
+    const gone = new Set<string>();
+    for (const c of this.cons) {
+      for (const n of c.nodes) {
+        if (n.dup || keep.has(n.title)) continue;
+        if (Math.hypot(c.x + n.dx * c.sc - con.x, c.y + n.dy * c.sc - con.y) < R) gone.add(n.title);
+      }
+    }
+    if (!gone.size) return;
+    for (const c of this.cons) {
+      const drop = new Set(c.nodes.filter((n) => gone.has(n.title)));
+      if (!drop.size) continue;
+      c.nodes = c.nodes.filter((n) => !drop.has(n));
+      for (const g of c.groups) g.nodes = g.nodes.filter((n) => !drop.has(n));
+      c.groups = c.groups.filter((g) => g.nodes.length > 0);
+      c.reach = undefined;
+      // a thread that hung from a removed star hangs from the nearest star closer in, or from the centre
+      const maxSq = CONFIG.maxThread * CONFIG.maxThread;
+      for (const n of c.nodes) {
+        if (!n.par || !drop.has(n.par)) continue;
+        let best: StarNode | null = null;
+        let bd = maxSq;
+        for (const p of c.nodes) {
+          if (p === n || p.r >= n.r || p.dup) continue;
+          const d = (p.dx - n.dx) * (p.dx - n.dx) + (p.dy - n.dy) * (p.dy - n.dy);
+          if (d < bd) {
+            bd = d;
+            best = p;
+          }
+        }
+        n.par = best;
+      }
+    }
+    for (const t of gone) this.world.delete(t);
+  }
+
+  /**
+   * Fit a new constellation into the map: a star already on the map is not drawn twice, and a new star
+   * that would land on an old one is moved outward to the nearest free spot.
+   */
+  private settle(con: Con): void {
+    const w = this.world;
+    const from = { x: con.x, y: con.y };
+    if (!w.has(con.title)) w.set(con.title, con.x, con.y);
+    for (const n of con.nodes) {
+      const known = w.get(n.title);
+      if (known) {
+        n.dup = true;
+        n.dx = (known.x - con.x) / con.sc;
+        n.dy = (known.y - con.y) / con.sc;
+        n.par = null;
+        this.shifted(n, Math.hypot(n.dx, n.dy));
+        continue;
+      }
+      const spot = w.free(con.x + n.dx * con.sc, con.y + n.dy * con.sc, from);
+      n.dx = (spot.x - con.x) / con.sc;
+      n.dy = (spot.y - con.y) / con.sc;
+      this.shifted(n, Math.hypot(n.dx, n.dy));
+      w.set(n.title, spot.x, spot.y);
+    }
+  }
+
+  /** A star that moved outward appears later, so that the ring of light still reaches it first. */
+  private shifted(n: StarNode, r: number): void {
+    n.born += ((r - n.r) / CONFIG.rMax) * CONFIG.bloomSpreadMs;
+    n.r = r;
+  }
+
+  /** Keep the map inside its star budget by dropping the oldest outer stars, outermost rank first. */
+  private trim(keep: Con): void {
+    if (this.world.size <= CONFIG.maxWorldStars) return;
+    for (const rank of [5, 4, 3]) {
+      for (const c of this.cons) {
+        if (c === keep || this.world.size <= CONFIG.maxWorldStars) continue;
+        const gone = c.nodes.filter((n) => n.rank === rank && !n.dup);
+        if (!gone.length) continue;
+        for (const n of gone) this.world.delete(n.title);
+        const drop = new Set(c.nodes.filter((n) => n.rank === rank));
+        c.nodes = c.nodes.filter((n) => !drop.has(n));
+        c.reach = undefined;
+        for (const g of c.groups) g.nodes = g.nodes.filter((n) => !drop.has(n));
+        c.groups = c.groups.filter((g) => g.nodes.length > 0);
+      }
+    }
   }
 
   private focusOffset(): number {
@@ -249,18 +374,22 @@ export class Engine {
     if (!this.running) return;
     const { ctx, cam, tgt, reduce, W, H, sp, colors } = this;
     const cur = this.current;
-    const dt = Math.min(64, now - (this.last || now));
+    const t0 = performance.now();
+    const dt = Math.min(CONFIG.maxFrameMs, now - (this.last || now));
     this.last = now;
+    this.glide(dt);
+    const still = Math.abs(tgt.x - cam.x) + Math.abs(tgt.y - cam.y) < CONFIG.settlePan * 4 && Math.abs(tgt.z - cam.z) < CONFIG.settleZoom * 8;
+    const level = still && !this.ptrs.size && this.moving === 0 ? this.lod : Math.max(this.lod, CONFIG.lodMoving);
     const k = reduce ? 1 : 1 - Math.exp(-dt * CONFIG.cameraEase);
     cam.x += (tgt.x - cam.x) * k;
     cam.y += (tgt.y - cam.y) * k;
     cam.z += (tgt.z - cam.z) * k;
     ctx.clearRect(0, 0, W, H);
-    const px = -((cam.x * 0.12) % 512);
-    const py = -((cam.y * 0.12) % 512);
-    ctx.globalAlpha = 0.9;
-    for (let gx = px - 512; gx < W; gx += 512) for (let gy = py - 512; gy < H; gy += 512) ctx.drawImage(sp.dust, gx, gy);
-    ctx.globalAlpha = 1;
+    const tile = CONFIG.dustTile;
+    // snapped to whole screen pixels, so the tile is copied and never resampled
+    const px = -Math.round(((cam.x * CONFIG.dustParallax) % tile) * this.ratio) / this.ratio;
+    const py = -Math.round(((cam.y * CONFIG.dustParallax) % tile) * this.ratio) / this.ratio;
+    for (let gx = px - tile; gx < W; gx += tile) for (let gy = py - tile; gy < H; gy += tile) ctx.drawImage(sp.dust, gx, gy, tile, tile);
 
     // memories slide away and shrink
     for (const c of this.cons) {
@@ -274,40 +403,41 @@ export class Engine {
         if (p >= 1) c.gm = null;
       }
     }
-    this.cons = this.cons.filter((c) => !(c.gone && c.dim < 0.02));
+    this.cons = this.cons.filter((c) => !(c.gone && c.dim < CONFIG.goneCutoff));
     let total = 0;
     const live = this.cons.filter((c) => !c.gone);
-    for (const c of live) if (c !== cur) total += drawCon(ctx, c, cam, now, W, H, { pulses: 0 }, sp, reduce);
+    for (const c of live) if (c !== cur) total += drawCon(ctx, c, cam, now, W, H, { pulses: 0, centreScale: CONFIG.visitedCentreScale, lod: level }, sp, reduce);
 
     // the trail you left, from memory to memory to here
     ctx.globalCompositeOperation = 'lighter';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([2, 7]);
-    for (let i = 1; i < live.length; i++) {
-      const A = live[i - 1];
-      const B = live[i];
-      if (!A || !B) continue;
-      ctx.strokeStyle = 'rgba(' + colors.trail + ',' + Math.min(0.55, A.dim + 0.2) + ')';
+    ctx.lineWidth = CONFIG.trailWidth;
+    ctx.setLineDash(CONFIG.trailDash);
+    const byTitle = new Map(live.map((c) => [c.title, c]));
+    for (let i = 1; i < this.trail.length; i++) {
+      const A = byTitle.get(this.trail[i - 1] ?? '');
+      const B = byTitle.get(this.trail[i] ?? '');
+      if (!A || !B || A === B) continue;
+      ctx.strokeStyle = 'rgba(' + colors.trail + ',' + Math.min(CONFIG.trailAlphaMax, A.dim * CONFIG.trailAlphaBoost + 0.1) + ')';
       ctx.beginPath();
       ctx.moveTo(A.cx, A.cy);
-      ctx.lineTo(W / 2 + (B.x - cam.x) * cam.z, H / 2 + (B.y - cam.y) * cam.z);
+      ctx.lineTo(B.cx, B.cy);
       ctx.stroke();
     }
     ctx.setLineDash([]);
     ctx.lineWidth = 1;
     ctx.globalCompositeOperation = 'source-over';
-    if (cur) total += drawCon(ctx, cur, cam, now, W, H, { pulses: CONFIG.pulses }, sp, reduce);
+    if (cur) total += drawCon(ctx, cur, cam, now, W, H, { pulses: CONFIG.pulses, lod: level }, sp, reduce);
 
     // marker around one star, used for the race target
     if (this.markerTitle && cur) {
-      for (const n of cur.nodes) {
-        if (n.title === this.markerTitle && n.a > 0.5 && n.on) {
-          const rr = 13 + (reduce ? 0 : Math.sin(now * 0.005) * 3);
+      for (const n of live.flatMap((c) => c.nodes)) {
+        if (n.title === this.markerTitle && !n.dup && n.a > CONFIG.pickMinGrow && n.on) {
+          const rr = CONFIG.markerRadius + (reduce ? 0 : Math.sin(now * CONFIG.markerPulseSpeed) * CONFIG.markerPulse);
           ctx.strokeStyle = 'rgb(' + colors.white + ')';
-          ctx.lineWidth = 1.6;
-          ctx.setLineDash([3, 3]);
+          ctx.lineWidth = CONFIG.markerWidth;
+          ctx.setLineDash(CONFIG.markerDash);
           ctx.beginPath();
-          ctx.arc(n.sx, n.sy, rr, 0, 6.3);
+          ctx.arc(n.sx, n.sy, rr, 0, TAU);
           ctx.stroke();
           ctx.setLineDash([]);
           ctx.lineWidth = 1;
@@ -317,27 +447,30 @@ export class Engine {
 
     // titles
     const boxes: [number, number, number, number][] = [];
+    const gap = CONFIG.labelSpacing;
     let placed = 0;
     ctx.textAlign = 'center';
     for (const c of live) {
       const on = c === cur;
-      const zz = Math.max(0.55, Math.min(2.2, Math.sqrt(cam.z * c.sc)));
+      const zz = zoomSize(cam.z * c.sc);
       ctx.font = on ? CONFIG.fontCentre : CONFIG.fontMemory;
-      ctx.fillStyle = on ? colors.title : 'rgba(' + colors.trail + ',' + Math.min(0.9, c.dim + 0.35) + ')';
-      if (on) ctx.globalAlpha = reduce ? 1 : ease((now - c.born) / 500);
-      const y = c.cy + (on ? 46 : 26) * zz;
+      ctx.fillStyle = on ? colors.title : 'rgba(' + colors.trail + ',' + Math.min(CONFIG.memoryTitleAlphaMax, c.dim + CONFIG.memoryTitleAlphaBoost) + ')';
+      if (on) ctx.globalAlpha = reduce ? 1 : ease((now - c.born) / CONFIG.titleFadeMs);
+      const y = c.cy + (on ? CONFIG.titleOffset : CONFIG.memoryTitleOffset) * zz;
       ctx.fillText(c.title, c.cx, y);
       ctx.globalAlpha = 1;
       const tw = ctx.measureText(c.title).width;
-      boxes.push([c.cx - tw / 2 - 4, y - 18, tw + 8, 24]);
+      boxes.push([c.cx - tw / 2 - CONFIG.titleBoxPad, y - CONFIG.titleBoxRise, tw + CONFIG.titleBoxPad * 2, CONFIG.titleBoxHeight]);
     }
     ctx.textAlign = 'left';
-    if (cur) {
-      for (let j0 = 0; j0 < cur.nodes.length && placed < CONFIG.maxLabels; j0++) {
-        const n = cur.nodes[j0];
-        if (!n || !n.on || n.a < 0.9 || n === this.hover) continue;
-        const big = n.rank <= 2;
-        if (!big && cam.z < 1.15 && n.rank > 3) continue;
+    const titled = cur ? [cur, ...live.filter((c) => c !== cur)] : [];
+    for (const c of titled) {
+      if (c.vis === false) continue;
+      for (let j0 = 0; j0 < c.nodes.length && placed < CONFIG.maxLabels; j0++) {
+        const n = c.nodes[j0];
+        if (!n || !n.on || n.dup || n.a < CONFIG.labelMinGrow || n === this.hover) continue;
+        const big = n.rank <= CONFIG.labelStrongRank;
+        if (!big && cam.z * c.sc < CONFIG.labelFarZoom && n.rank > CONFIG.labelFarRank) continue;
         ctx.font = big ? CONFIG.fontStrong : CONFIG.fontSoft;
         let bw = big ? n.wb : n.ws;
         if (bw === undefined) {
@@ -345,38 +478,90 @@ export class Engine {
           if (big) n.wb = bw;
           else n.ws = bw;
         }
-        const bx = n.sx + (CONFIG.size[n.rank] ?? 0) * 0.9 + 5;
-        const by = n.sy - 8;
-        if (bx + bw > W - 6) continue;
+        const bx = n.sx + (CONFIG.size[n.rank] ?? 0) * CONFIG.labelOffset + CONFIG.labelGap;
+        const by = n.sy - CONFIG.labelRise;
+        if (bx + bw > W - CONFIG.labelEdge) continue;
         let hit = false;
         for (const b of boxes) {
-          if (!(bx > b[0] + b[2] + 4 || bx + bw + 4 < b[0] || by > b[1] + b[3] || by + 15 < b[1])) {
+          if (!(bx > b[0] + b[2] + gap || bx + bw + gap < b[0] || by > b[1] + b[3] || by + CONFIG.labelHeight < b[1])) {
             hit = true;
             break;
           }
         }
         if (hit) continue;
-        boxes.push([bx, by, bw, 15]);
+        boxes.push([bx, by, bw, CONFIG.labelHeight]);
         placed++;
         ctx.fillStyle = this.visited.has(n.title) ? colors.visited : big ? colors.strong : colors.soft;
-        ctx.fillText(n.title, bx, n.sy + 4);
+        ctx.fillText(n.title, bx, n.sy + CONFIG.labelBaseline);
       }
     }
     const hover = this.hover;
     if (hover && hover.on) {
-      ctx.strokeStyle = 'rgba(' + colors.white + ',.8)';
+      ctx.strokeStyle = 'rgba(' + colors.white + ',' + CONFIG.hoverRingAlpha + ')';
       ctx.beginPath();
-      ctx.arc(hover.sx, hover.sy, (CONFIG.size[hover.rank] ?? 0) + 6, 0, 6.3);
+      ctx.arc(hover.sx, hover.sy, (CONFIG.size[hover.rank] ?? 0) + CONFIG.hoverRingGap, 0, TAU);
       ctx.stroke();
     }
     this.events.onFrame?.({ stars: total, memories: live.length - 1 }, now);
-    const settled = Math.abs(tgt.x - cam.x) + Math.abs(tgt.y - cam.y) < 0.05 && Math.abs(tgt.z - cam.z) < 0.0005;
-    if (reduce && settled && !this.cons.some((c) => c.gm || Math.abs(c.dim - c.dimT) > 0.01)) {
+    this.adapt(this.last0 ? now - this.last0 : 0, performance.now() - t0);
+    this.last0 = now;
+    const settled = Math.abs(tgt.x - cam.x) + Math.abs(tgt.y - cam.y) < CONFIG.settlePan && Math.abs(tgt.z - cam.z) < CONFIG.settleZoom;
+    if (reduce && settled && !this.cons.some((c) => c.gm || Math.abs(c.dim - c.dimT) > CONFIG.settleDim)) {
       this.running = false;
       return;
     }
     this.raf = requestAnimationFrame(this.frame);
   };
+
+  /** Keep a pan gliding after the pointer lets go, slowing smoothly to a stop. */
+  private glide(dt: number): void {
+    const v = this.vel;
+    if (this.reduce || this.ptrs.size || Math.abs(v.x) + Math.abs(v.y) < CONFIG.glideMin) {
+      if (!this.ptrs.size || this.reduce) v.x = v.y = 0;
+      this.moving = Math.max(0, this.moving - 1);
+      return;
+    }
+    const f = Math.exp(-dt * CONFIG.glideDecay);
+    this.tgt.x -= v.x * dt;
+    this.tgt.y -= v.y * dt;
+    this.cam.x -= v.x * dt;
+    this.cam.y -= v.y * dt;
+    v.x *= f;
+    v.y *= f;
+    this.moving = 3;
+  }
+
+  /**
+   * Adaptive detail: when drawing takes too long, drop the faintest stars and their light, and bring them back
+   * when there is time to spare.
+   */
+  private adapt(gap: number, ms: number): void {
+    // the time between frames is what the reader feels; drawing time alone misses the work done after the calls are made
+    const felt = Math.max(gap, ms);
+    if (gap > 250) this.calm = 0;
+    else this.cost = this.cost ? this.cost * 0.9 + felt * 0.1 : felt;
+    if (this.hold > 0) this.hold--;
+    else if (this.cost > CONFIG.lodSlowMs && this.lod < CONFIG.lodMax) {
+      this.lod++;
+      this.hold = CONFIG.lodHold;
+    } else if (this.cost > CONFIG.lodSlowMs * 1.5 && this.shrink > CONFIG.shrinkMin && pixelRatio() > 1) {
+      this.shrink = Math.max(CONFIG.shrinkMin, this.shrink * CONFIG.shrinkStep);
+      this.hold = CONFIG.lodHold * 2;
+      this.resize();
+    } else if (this.cost < CONFIG.lodFastMs && ++this.calm < CONFIG.lodCalm) {
+      // wait for a calm stretch before asking for more detail
+    } else if (this.cost < CONFIG.lodFastMs && this.shrink < 1) {
+      this.shrink = Math.min(1, this.shrink / CONFIG.shrinkStep);
+      this.calm = 0;
+      this.hold = CONFIG.lodHold * 2;
+      this.resize();
+    } else if (this.cost < CONFIG.lodFastMs && this.lod > 0) {
+      this.lod--;
+      this.calm = 0;
+      this.hold = CONFIG.lodHold;
+    }
+    if (this.cost >= CONFIG.lodFastMs) this.calm = 0;
+  }
 
   /* ---------- pointer ---------- */
 
@@ -390,12 +575,16 @@ export class Engine {
     if (!cur) return null;
     let best: StarNode | null = null;
     let bd = CONFIG.pickRadius * CONFIG.pickRadius;
-    for (const n of cur.nodes) {
-      if (!n.on || n.a < 0.5) continue;
-      const d = (n.sx - p.x) * (n.sx - p.x) + (n.sy - p.y) * (n.sy - p.y);
-      if (d < bd) {
-        bd = d;
-        best = n;
+    // the live constellation first, so that it wins a tie
+    for (const c of [cur, ...this.cons.filter((x) => x !== cur && !x.gone)]) {
+      if (c.vis === false) continue;
+      for (const n of c.nodes) {
+        if (!n.on || n.a < CONFIG.pickMinGrow) continue;
+        const d = (n.sx - p.x) * (n.sx - p.x) + (n.sy - p.y) * (n.sy - p.y);
+        if (d < bd) {
+          bd = d;
+          best = n;
+        }
       }
     }
     if (best) return { kind: 'star', node: best };
@@ -424,14 +613,19 @@ export class Engine {
       this.moved = 0;
       this.lastP = p;
       this.pinch = 0;
+      this.vel = { x: 0, y: 0 };
+      this.velAt = performance.now();
       sky.classList.add('drag');
     });
     sky.addEventListener('pointermove', (e) => {
       const p = this.at(e);
       if (!this.ptrs.has(e.pointerId)) {
         const o = this.pick(p);
+        const over = o && o.kind === 'star' ? o.node : null;
         sky.style.cursor = o ? 'pointer' : '';
-        this.hover = o && o.kind === 'star' ? o.node : null;
+        // with reduced motion the loop rests, so a change of ring needs a frame
+        if (over !== this.hover) this.kick();
+        this.hover = over;
         this.events.onHover?.(o, p, this.W, this.H);
         return;
       }
@@ -442,7 +636,7 @@ export class Engine {
           const dd = Math.hypot(A.x - B.x, A.y - B.y);
           if (this.pinch) this.zoomAt({ x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, dd / this.pinch);
           this.pinch = dd;
-          this.moved = 99;
+          this.moved = CONFIG.clickSlop;
         }
         return;
       }
@@ -452,6 +646,10 @@ export class Engine {
       this.tgt.y -= dy;
       this.cam.x -= dx;
       this.cam.y -= dy;
+      const tNow = performance.now();
+      const span = Math.max(1, tNow - this.velAt);
+      this.vel = { x: this.vel.x * 0.6 + (dx / span) * 0.4, y: this.vel.y * 0.6 + (dy / span) * 0.4 };
+      this.velAt = tNow;
       this.moved += Math.abs(p.x - this.lastP.x) + Math.abs(p.y - this.lastP.y);
       this.lastP = p;
       this.kick();
@@ -460,6 +658,8 @@ export class Engine {
       const had = this.ptrs.delete(e.pointerId);
       this.pinch = 0;
       sky.classList.remove('drag');
+      if (this.moved < CONFIG.clickSlop || performance.now() - this.velAt > 80 || this.ptrs.size > 0) this.vel = { x: 0, y: 0 };
+      else this.kick();
       if (had && this.moved < CONFIG.clickSlop && e.type === 'pointerup') {
         const o = this.pick(this.at(e));
         if (o) this.events.onPick?.(o.kind === 'star' ? o.node.title : o.con.title);
@@ -470,6 +670,7 @@ export class Engine {
     sky.addEventListener('pointerup', up);
     sky.addEventListener('pointercancel', up);
     sky.addEventListener('pointerleave', () => {
+      if (this.hover) this.kick();
       this.hover = null;
       this.events.onHover?.(null, { x: 0, y: 0 }, this.W, this.H);
     });

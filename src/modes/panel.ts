@@ -1,24 +1,30 @@
-import type { ArticleSummary } from '../types';
+import type { ArticleSummary, Suggestion } from '../types';
 import { esc } from '../lib';
 import { swatch } from '../styles';
-import { relations } from '../comforts';
+import { relations, tieWord } from '../comforts';
 import type { Con } from '../engine';
+import { summaryHtml } from './summary';
+
+/** The nine stars worth a click next: strongest ties first, and places the reader has not been before places they have. */
+export function closest<T extends { title: string; rank: number; score: number }>(nodes: readonly T[], visited: ReadonlySet<string>, count = 9): T[] {
+  return nodes
+    .slice()
+    .sort((a, b) => Number(visited.has(a.title)) - Number(visited.has(b.title)) || a.rank - b.rank || b.score - a.score)
+    .slice(0, count);
+}
+
+/** What the search box offers before anything is typed: the best next stars, each with its tie in words. */
+export function suggestNext(nodes: readonly { title: string; rank: number; score: number }[], visited: ReadonlySet<string>, count = 6): Suggestion[] {
+  return closest(nodes, visited, count).map((n) => ({ title: n.title, description: tieWord(n.rank) }));
+}
 
 /** The article panel: the live constellation, in encyclopedia dress. */
 export function panelHtml(cur: Con, trail: readonly string[], visited: ReadonlySet<string>, summary: ArticleSummary | null, note: string): string {
   const cnt = [0, 0, 0, 0, 0, 0];
   for (const n of cur.nodes) cnt[n.rank] = (cnt[n.rank] ?? 0) + 1;
-  const top = cur.nodes
-    .slice()
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 9);
+  const top = closest(cur.nodes, visited);
   const link = (title: string): string =>
     '<button type="button" class="lk" data-t="' + esc(title) + '"' + (visited.has(title) ? ' style="color:var(--visited)"' : '') + '>' + esc(title) + '</button>';
-  let extract = '';
-  if (summary) {
-    const text = summary.extract;
-    extract = '<p>' + (text.startsWith(cur.title) ? '<b>' + esc(cur.title) + '</b>' + esc(text.slice(cur.title.length)) : esc(text)) + '</p>';
-  }
   return (
     '<h1>' +
     esc(cur.title) +
@@ -36,9 +42,13 @@ export function panelHtml(cur: Con, trail: readonly string[], visited: ReadonlyS
     " close ties</span><b>Rank 3 to 5</b><span class='mono'>" +
     ((cnt[3] ?? 0) + (cnt[4] ?? 0) + (cnt[5] ?? 0)) +
     ' loose ties</span></div>' +
-    extract +
+    "<div class='sum'>" +
+    summaryHtml(cur.title, summary) +
+    '</div>' +
     '<h2>Closest stars</h2><ul>' +
-    top.map((o) => '<li>' + swatch(o.subject, 8) + ' ' + link(o.title) + ' <small>' + relations(o) + '</small></li>').join('') +
+    top
+      .map((o) => '<li>' + swatch(o.subject, 8) + ' ' + link(o.title) + ' <small>' + tieWord(o.rank).replace(' tie', '').toLowerCase() + ' · ' + relations(o) + '</small></li>')
+      .join('') +
     '</ul>' +
     '<h2>Your path</h2><ol>' +
     trail.map((t) => '<li>' + esc(t) + '</li>').join('') +

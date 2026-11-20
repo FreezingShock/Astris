@@ -1,12 +1,21 @@
 import type { ArticleSummary, Constellation, DataProvider, Suggestion } from '../types';
-import { clock, esc } from '../lib';
-import { subjectRgb } from '../styles';
+import { esc } from '../lib';
+import { replay, subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
-import { Discovery, Tip, initKeyboard } from '../comforts';
-import { legendHtml, panelHtml } from './panel';
-import { hudHtml, par, randomPair, type Race } from './race';
+import { Atlas, Collection } from '../sky';
+import { Celebration, Discovery, Share, Sound, Tip, Tour, firstLine, initKeyboard, tierOf } from '../comforts';
+import { Connect, connectHtml, type ConnectState } from './connect';
+import { dailyPair, dayOf, recent, saveDaily, shareText, streak } from './daily';
+import { recordRun } from './stats';
+import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
+import { diagnose } from '../data';
+import { OutageScreen } from './outage';
+import { legendHtml, panelHtml, suggestNext } from './panel';
+import { graphOf, route } from './graph';
+import { NO_RULES, REVEAL_BUDGET, loadRules, refusal, revealText, saveRules, type Rules } from './rules';
+import { PAR_BEAM, PAR_DEPTH, PICKING_HTML, beginRace, clockText, expire, hudHtml, solvePar, randomPair, stepRace, type Pair, type Race } from './race';
 
-export type Mode = 'explore' | 'race';
+export type Mode = 'explore' | 'race' | 'daily' | 'connect' | 'drift';
 
 /** Wording that depends on where the data comes from. */
 export interface SourceCopy {
@@ -18,13 +27,9 @@ export interface SourceCopy {
   panelNote: string;
 }
 
-const SOON: Record<string, string> = {
-  connect: 'Connect two is planned: type two topics and the shortest chain between them lights up.',
-  daily: 'Daily constellation is planned: one pair a day, the same for everyone.',
-  drift: 'Drift is planned: the map explores itself, like a screensaver.',
-};
-
 const DEFAULT_ARTICLE = 'Architecture';
+/** How long the pointer rests on a star before its article is fetched ahead of a click. */
+const WARM_DWELL_MS = 350;
 
 function $<T extends HTMLElement = HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -40,10 +45,27 @@ export class Play {
   readonly engine: Engine;
   mode: Mode = 'explore';
   private race: Race | null = null;
+  /** Counts race starts, so a slow start that has been overtaken is dropped. */
+  private raceSeq = 0;
+  private picking = false;
+  /** A random pair picked ahead of time, so the next new chain starts at once. */
+  private ahead: Promise<Pair> | null = null;
+  private readonly connect: Connect;
   private readonly discovery = new Discovery();
+  private readonly collection = new Collection();
+  private atlas: Atlas | null = null;
   private readonly tip: Tip;
+  private readonly share: Share;
+  private readonly sound = new Sound();
+  private readonly fx: Celebration;
+  private readonly tour: Tour;
   private seq = 0;
+  private warmTimer = 0;
+  private readonly warmed = new Set<string>();
+  private driftTimer = 0;
+  private driftSeen: string[] = [];
   private toastTimer = 0;
+  private readonly outage: OutageScreen;
   private found: Suggestion[] = [];
   private sel = 0;
   private suggestSeq = 0;
@@ -56,46 +78,99 @@ export class Play {
     private readonly copy: SourceCopy,
     private readonly isOpen: () => boolean,
   ) {
-    this.tip = new Tip($('tip'), (title) => !!this.race && !this.race.done && title === this.race.target);
+    this.tip = new Tip(
+      $('tip'),
+      (title) => !!this.race && !this.race.done && title === this.race.target,
+      (title, signal) => this.provider.summary(title, signal),
+      () => this.engine.current?.title ?? null,
+      (title) => this.engine.visited.has(title),
+    );
     this.engine = new Engine($<HTMLCanvasElement>('sky'), {
-      onPick: (title) => void this.navigate(title),
-      onHover: (target, p, w, h) => this.tip.show(target, p, w, h),
+      onPick: (title) => {
+        this.stopDrift();
+        void this.navigate(title);
+      },
+      onHover: (target, p, w, h) => {
+        this.tip.show(target, p, w, h);
+        this.warm(target && target.kind === 'star' ? target.node.title : null);
+      },
       onChange: (cur) => this.changed(cur),
       onTravel: (title, now) => this.travelled(title, now),
       onFrame: (stats, now) => {
         $('gstat').textContent =
           stats.stars +
           ' stars · ' +
-          stats.memories +
-          (stats.memories === 1 ? ' memory' : ' memories') +
+          (stats.memories + 1) +
+          (stats.memories + 1 === 1 ? ' centre' : ' centres') +
           ' · ' +
-          this.discovery.count +
-          ' articles discovered · ' +
-          this.copy.status;
+          this.discovery.label +
+          ' · ' +
+          this.copy.status +
+          this.perf();
         if (this.race && !this.race.done) {
           const t = document.getElementById('rt');
-          if (t) t.textContent = clock(now - this.race.t0);
+          if (t) t.textContent = clockText(this.race, now);
+          if (expire(this.race, now)) {
+            this.engine.markerTitle = null;
+            this.hud();
+          }
         }
       },
     });
+    this.share = new Share({
+      host: $('surprise').parentElement ?? $('play'),
+      state: () => {
+        const cur = this.engine.current;
+        if (this.race) return { mode: 'race', start: this.race.start, target: this.race.target };
+        return cur ? { mode: 'explore', article: cur.title } : null;
+      },
+      onMap: this.isOpen,
+      toast: (message) => this.toast(message),
+    });
+    this.fx = new Celebration($('play'));
+    this.tour = new Tour({ host: $('play'), canvas: $('sky'), search: this.gq, onRace: () => void this.newRace() });
+    this.connect = new Connect({
+      provider: this.provider,
+      current: () => this.engine.current?.title ?? null,
+      open: async (title) => {
+        const data = await this.load(title, (d) => this.reset(d), false);
+        if (data) this.reset(data);
+        return data ? data.center.title : null;
+      },
+      travel: async (title) => {
+        await this.navigate(title);
+        return this.engine.current?.title === title;
+      },
+      mark: (title) => {
+        this.engine.markerTitle = title;
+      },
+      render: (state) => this.connectCard(state),
+      wait: (ms) => new Promise((done) => window.setTimeout(done, ms)),
+    });
+    this.outage = new OutageScreen($('outage'), { home: () => $('play').querySelector<HTMLElement>('.logo')?.click(), random: () => void this.surprise() });
     this.bind();
   }
 
   /** The map route opened. */
   enter(): void {
     this.engine.enable();
+    this.share.sync();
     if (!this.engine.current) void this.open(DEFAULT_ARTICLE, false);
+    // The tutorial greets a first visit to the plain map, never a shared link.
+    if (!this.tour.seen && !this.tour.open && !location.search) this.tour.start();
   }
 
   /** The map route closed. */
   leave(): void {
+    this.atlas?.close(false);
     this.engine.disable();
   }
 
   /** Start over from one article, in Explore unless told otherwise. */
   async open(title: string, explore = true): Promise<void> {
+    this.atlas?.close(false);
     if (explore) this.setMode('explore');
-    const data = await this.load(title);
+    const data = await this.load(title, (d) => this.reset(d));
     if (data) this.reset(data);
   }
 
@@ -104,21 +179,34 @@ export class Play {
     const cur = this.engine.current;
     if (!cur) return this.open(title, false);
     if (title === cur.title) return;
-    const data = await this.load(title);
-    if (!data) return;
-    this.discovery.note(data);
-    this.engine.travel(data);
+    const race = this.race;
+    if (race && !race.done) {
+      const subject = cur.nodes.find((n) => n.title === title)?.subject;
+      const why = refusal(race.rules, title, race.target, subject, race.seen, race.revisits);
+      if (why) return this.toast(why);
+    }
+    const go = (d: Constellation): void => {
+      this.collect(d);
+      this.engine.travel(d);
+    };
+    const data = await this.load(title, go);
+    if (data) go(data);
   }
 
   /** Travel to a random article, leaving a race if one is running. */
   async surprise(): Promise<void> {
+    this.atlas?.close(false);
     const cur = this.engine.current;
     let t: string;
     let n = 0;
-    do {
-      t = await this.provider.random();
-      n++;
-    } while (cur && t === cur.title && n < 20);
+    try {
+      do {
+        t = await this.provider.random();
+        n++;
+      } while (cur && t === cur.title && n < 20);
+    } catch (err) {
+      return this.report(err, () => this.surprise());
+    }
     if (this.mode !== 'explore') this.setMode('explore');
     if (cur) {
       this.clearSearch();
@@ -126,26 +214,189 @@ export class Play {
     } else await this.open(t, false);
   }
 
-  async startRace(start: string, target: string, knownPar?: number): Promise<void> {
-    this.setMode('race');
-    const p = knownPar ?? (await par(this.provider, start, target));
-    const data = await this.load(start);
-    if (!data || this.mode !== 'race') return;
-    this.race = { start, target, clicks: 0, par: p, t0: performance.now(), time: 0, done: false };
+  /** Start a race between two articles. Par is searched for in the background unless it is already known. */
+  async startRace(start: string, target: string, knownPar?: number, day?: number, hard = false, rules: Rules = day === undefined ? loadRules() : NO_RULES): Promise<void> {
+    this.atlas?.close(false);
+    const seq = ++this.raceSeq;
+    this.picking = false;
+    this.setMode(day === undefined ? 'race' : 'daily');
+    const data = await this.load(start, () => this.startRace(start, target, knownPar, day, hard, rules));
+    if (seq !== this.raceSeq) return;
+    if (!data) {
+      if (!this.race) this.setMode('explore');
+      return;
+    }
+    // The provider follows redirects, so race on the titles it actually uses.
+    const race = beginRace(data.center.title, target, knownPar ?? null, performance.now(), day, hard, rules);
+    this.race = race;
     this.engine.markerTitle = target;
     this.reset(data);
     this.hud();
+    void this.provider.summary(target).then(
+      (s) => {
+        if (this.race !== race || race.done) return;
+        if (s.title && s.title !== race.target) {
+          race.target = s.title;
+          this.engine.markerTitle = s.title;
+        }
+        race.hint = firstLine(s.extract, 90);
+        this.hud();
+      },
+      () => undefined,
+    );
+    const found = await solvePar(this.provider, race.start, target);
+    if (this.race !== race) return;
+    if (found.par >= 0 || knownPar === undefined) {
+      race.par = found.par;
+      race.parExact = found.exact;
+    }
+    if (found.route) race.route = found.route;
+    this.hud();
   }
 
+  /** Open Connect two, optionally with both articles already chosen. */
+  async startConnect(from?: string, to?: string): Promise<void> {
+    this.atlas?.close(false);
+    this.setMode('connect');
+    this.connect.start();
+    if (from && to) await this.connect.run(from, to);
+  }
+
+  /** Start today's race: one pair a day, the same for every visitor. */
+  async startDaily(hard = false): Promise<void> {
+    this.atlas?.close(false);
+    const pair = dailyPair(undefined, hard);
+    await this.startRace(pair.start, pair.target, undefined, pair.day, hard);
+  }
+
+  /** A random pair: the one picked ahead if there is one, otherwise a fresh pick. */
+  private pair(): Promise<Pair> {
+    const next = this.ahead ?? randomPair(this.provider);
+    this.ahead = null;
+    return next;
+  }
+
+  /** Pick the next pair in the background, once. A failed pick is forgotten. */
+  private prepare(): void {
+    if (this.ahead) return;
+    const pick = randomPair(this.provider);
+    this.ahead = pick;
+    pick.catch(() => {
+      if (this.ahead === pick) this.ahead = null;
+    });
+  }
+
+  /** Connect two articles chosen at random, in one click. */
+  async surprisePair(): Promise<void> {
+    if (this.mode !== 'connect') this.startConnect().catch(() => undefined);
+    await this.connect.surprise(() => this.pair());
+  }
+
+  /** The fastest way to a new chain: a new race, or a new pair in Connect two. */
+  newChain(): Promise<void> {
+    return this.mode === 'connect' ? this.surprisePair() : this.newRace();
+  }
+
+  /** Start a race between a freshly picked random pair. */
   async newRace(): Promise<void> {
-    const pair = await randomPair(this.provider);
-    await this.startRace(pair.start, pair.target, pair.par);
+    const seq = ++this.raceSeq;
+    this.setMode('race');
+    this.race = null;
+    this.engine.markerTitle = null;
+    this.picking = true;
+    this.hud();
+    try {
+      const pair = await this.pair();
+      if (seq === this.raceSeq) await this.startRace(pair.start, pair.target, pair.par);
+    } catch (err) {
+      if (seq !== this.raceSeq) return;
+      this.setMode('explore');
+      await this.report(err, () => this.newRace());
+    }
+  }
+
+  /** Turn a rule on or off. The same race starts over so the new rule applies from the first click. */
+  private async toggleRule(rule: keyof Rules): Promise<void> {
+    const race = this.race;
+    if (!race || race.day !== undefined) return;
+    const rules = { ...race.rules, [rule]: !race.rules[rule] };
+    saveRules(rules);
+    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, undefined, false, rules);
+  }
+
+  /** Reveal: spend one use to learn how far the target is from here and the first step to take. */
+  private async reveal(): Promise<void> {
+    const race = this.race;
+    const cur = this.engine.current;
+    if (!race || race.done || !cur || !race.reveals) return;
+    race.note = 'Looking for a route…';
+    this.hud();
+    const chain = await route(graphOf(this.provider), cur.title, race.target, { maxDepth: PAR_DEPTH, budget: REVEAL_BUDGET, beam: PAR_BEAM });
+    if (this.race !== race || race.done || this.engine.current !== cur) return;
+    if (chain) {
+      race.reveals--;
+      race.revealed++;
+    }
+    race.note = revealText(chain);
+    this.hud();
+  }
+
+  /** Copy the finished daily's result grid, which names neither article, to the clipboard. */
+  async shareDaily(): Promise<void> {
+    const race = this.race;
+    if (!race?.done || race.day === undefined || !race.best) return;
+    const text = shareText(race.day, race.hard === true, race.best, location.origin + '/play?daily=' + (race.hard ? 'hard' : '1'));
+    const copied = await navigator.clipboard.writeText(text).then(
+      () => true,
+      () => false,
+    );
+    this.toast(copied ? 'Result copied. Paste it anywhere.' : 'Could not reach the clipboard.');
+  }
+
+  /** Run the current race again from its start. */
+  async retryRace(): Promise<void> {
+    const race = this.race;
+    if (!race) return this.newRace();
+    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, race.day, race.hard, race.rules);
+  }
+
+  /** Drift: the map travels to a neighbouring article every few seconds until the reader acts. */
+  startDrift(): void {
+    this.atlas?.close(false);
+    this.setMode('drift');
+    this.hud();
+    const step = async (): Promise<void> => {
+      const cur = this.engine.current?.title;
+      if (cur) {
+        this.driftSeen = [...this.driftSeen.slice(-8), cur];
+        const next = nextStop(await this.provider.neighbours(cur).catch(() => []), this.driftSeen);
+        if (this.mode !== 'drift') return;
+        if (next) await this.navigate(next);
+        else await this.navigate(await this.provider.random());
+      }
+      if (this.mode === 'drift') this.driftTimer = window.setTimeout(() => void step(), DRIFT_MS);
+    };
+    this.driftTimer = window.setTimeout(() => void step(), 1200);
+  }
+
+  private stopDrift(): void {
+    clearTimeout(this.driftTimer);
+    if (this.mode === 'drift') this.setMode('explore');
   }
 
   setMode(m: Mode): void {
+    this.atlas?.close(false);
+    if (m !== 'drift') clearTimeout(this.driftTimer);
     this.mode = m;
     document.querySelectorAll<HTMLElement>('#modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
-    if (m !== 'race') {
+    if (m !== 'connect' && this.connect.state) {
+      this.connect.stop();
+      this.engine.markerTitle = null;
+      this.hud();
+    }
+    if (m === 'explore' || m === 'connect') {
+      this.raceSeq++;
+      this.picking = false;
       this.race = null;
       this.engine.markerTitle = null;
       this.hud();
@@ -164,24 +415,86 @@ export class Play {
 
   /** Tell the reader an article could not be found. */
   missing(query: string): void {
-    this.toast('No article called “' + query + '” ' + this.copy.missing + '.');
+    this.outage.show('missing', { query, keep: this.engine.current !== null });
   }
 
-  /** Fetch a constellation. Only the latest request wins; a failed one shows a note and returns null. */
-  private async load(title: string): Promise<Constellation | null> {
+  /**
+   * Resting on a star for a moment fetches its constellation ahead of the click, so that travelling there feels instant.
+   * The provider keeps what it fetched; one star at a time keeps within Wikipedia's rate limits.
+   */
+  private warm(title: string | null): void {
+    clearTimeout(this.warmTimer);
+    if (!title || title === this.engine.current?.title || this.warmed.has(title)) return;
+    this.warmTimer = window.setTimeout(() => {
+      this.warmed.add(title);
+      void this.provider.constellation(title).catch(() => undefined);
+    }, WARM_DWELL_MS);
+  }
+
+  /** With ?perf in the address: how long a frame takes to draw and how much detail is drawn. */
+  private perf(): string {
+    if (!location.search.includes('perf')) return '';
+    return ' · ' + this.engine.frameMs.toFixed(1) + ' ms/frame · detail ' + this.engine.detail;
+  }
+
+  /**
+   * Show the screen that matches why Wikipedia could not be reached, with `retry` to run again by itself.
+   * A cancelled request says nothing; a missing article gets its own screen without a retry.
+   */
+  async report(err: unknown, retry: () => Promise<void>, query = '', screenForMissing = true): Promise<void> {
+    const why = await diagnose(err);
+    if (why === 'cancelled') return;
+    if (why === 'missing') return screenForMissing ? this.missing(query) : this.toast('No article called “' + query + '” ' + this.copy.missing + '.');
+    this.outage.show(why, { retry, keep: this.engine.current !== null });
+  }
+
+  /** Put the outage screen away, for example once a request has worked. */
+  clearOutage(): void {
+    if (this.outage.open) this.outage.hide();
+  }
+
+  /**
+   * Fetch a constellation. Only the latest request wins; a failure shows its screen and returns null.
+   * When the screen's own retry gets the data later, `then` finishes the job the caller would have done.
+   */
+  private async load(title: string, then?: (data: Constellation) => void | Promise<void>, screenForMissing = true): Promise<Constellation | null> {
     const seq = ++this.seq;
-    try {
+    const fetchIt = async (): Promise<Constellation | null> => {
       const data = await this.provider.constellation(title);
+      this.clearOutage();
       return seq === this.seq ? data : null;
-    } catch {
-      if (seq === this.seq) this.missing(title);
+    };
+    try {
+      return await fetchIt();
+    } catch (err) {
+      if (seq === this.seq) {
+        await this.report(
+          err,
+          async () => {
+            const data = await fetchIt();
+            if (data) await then?.(data);
+          },
+          title,
+          screenForMissing,
+        );
+      }
       return null;
     }
   }
 
-  private reset(data: Constellation): void {
-    this.discovery.reset();
+  /** Count the constellation as discovered and add its centre to the sky map. */
+  private collect(data: Constellation): void {
     this.discovery.note(data);
+    const r = this.collection.visit(data.center.title, data.center.subject);
+    const said: string[] = [];
+    if (r.lit) said.push('New region lit: ' + r.lit);
+    for (const a of r.unlocked) said.push('Achievement: ' + a.name);
+    if (said.length) this.toast(said.join(' · '));
+    this.atlas?.refresh();
+  }
+
+  private reset(data: Constellation): void {
+    this.collect(data);
     this.engine.reset(data);
   }
 
@@ -190,15 +503,14 @@ export class Play {
     $('legend').innerHTML = legendHtml(cur);
     this.summary = null;
     this.panel(true);
-    void this.provider.summary(cur.title).then(
-      (s) => {
-        if (this.engine.current === cur) {
-          this.summary = s;
-          this.panel(false);
-        }
-      },
-      () => undefined,
-    );
+    this.share.sync();
+    const show = (s: ArticleSummary): void => {
+      if (this.engine.current !== cur) return;
+      this.summary = s;
+      this.panel(false);
+    };
+    // A summary that cannot be fetched leaves the rest of the panel in place.
+    void this.provider.summary(cur.title).then(show, () => show({ title: cur.title, extract: '', url: '' }));
   }
 
   private panel(scrollTop: boolean): void {
@@ -206,25 +518,80 @@ export class Play {
     if (!cur) return;
     const el = $('panel');
     el.innerHTML = panelHtml(cur, this.engine.trail, this.engine.visited, this.summary, this.copy.panelNote);
-    if (scrollTop) el.scrollTop = 0;
+    if (scrollTop) {
+      el.scrollTop = 0;
+      replay(el, 'swap');
+    }
   }
 
   private travelled(title: string, now: number): void {
+    this.sound.arrive(title);
+    this.tour.advance('travel');
     const race = this.race;
     if (!race || race.done) return;
-    race.clicks++;
-    if (title === race.target) {
-      race.done = true;
-      race.time = now - race.t0;
+    if (stepRace(race, title, now)) {
       this.engine.markerTitle = null;
+      if (race.day !== undefined) {
+        const hard = race.hard === true;
+        race.best = saveDaily(race.day, { clicks: race.clicks, time: race.time, ...(race.par !== null && race.par > 0 ? { par: race.par } : {}) }, undefined, hard);
+        race.streak = streak(race.day);
+        race.calendar = recent(race.day);
+      }
+      race.result = recordRun({
+        day: dayOf(),
+        mode: race.day === undefined ? 'race' : 'daily',
+        start: race.start,
+        target: race.target,
+        clicks: race.clicks,
+        par: race.par,
+        time: race.time,
+        hints: race.revealed,
+      });
+      this.prepare();
+      this.celebrate(race);
     }
     this.hud();
   }
 
+  /** A burst of stars and a rising chime when a race ends; a better finish makes more of both. */
+  private celebrate(race: Race): void {
+    const tier = tierOf(race.clicks, race.par);
+    this.sound.win(tier);
+    this.hud();
+    this.fx.burst(tier, $('hud'), this.engine.current?.subject ?? 'Other');
+  }
+
+  private connectCard(state: ConnectState | null): void {
+    const el = $('hud');
+    el.className = state ? 'card on connect' : 'card';
+    if (state) el.innerHTML = connectHtml(state);
+    if (state?.step === 'form') el.querySelector<HTMLInputElement>(state.from ? "input[name='to']" : "input[name='from']")?.focus();
+  }
+
+  /** Fill the Connect two inputs' shared suggestion list as the reader types. */
+  private async connectSuggest(input: HTMLInputElement): Promise<void> {
+    const q = input.value.trim();
+    const seq = ++this.suggestSeq;
+    // An empty field offers the best next stars from the map, so a pair can be filled in without typing.
+    const cur = this.engine.current;
+    const found = q ? await this.provider.suggest(q).catch(() => []) : cur ? suggestNext(cur.nodes, this.engine.visited, 8) : [];
+    const list = document.getElementById('clist');
+    if (list && seq === this.suggestSeq)
+      list.innerHTML = found.map((f) => '<option value="' + esc(f.title) + '"' + (f.description ? ' label="' + esc(f.description) + '"' : '') + '></option>').join('');
+  }
+
   private hud(): void {
     const el = $('hud');
+    this.share.sync();
+    if (this.connect.state) return;
+    if (!this.race && this.mode === 'drift') {
+      el.className = 'card on';
+      el.innerHTML = DRIFT_HTML;
+      return;
+    }
     if (!this.race) {
-      el.className = 'card';
+      el.className = this.picking ? 'card on' : 'card';
+      if (this.picking) el.innerHTML = PICKING_HTML;
       return;
     }
     el.className = 'card on' + (this.race.done ? ' win' : '');
@@ -241,6 +608,7 @@ export class Play {
   }
 
   private choose(title: string): void {
+    this.atlas?.close(false);
     this.clearSearch();
     if (this.engine.current) void this.navigate(title);
   }
@@ -249,8 +617,12 @@ export class Play {
     const q = this.gq.value.trim();
     const seq = ++this.suggestSeq;
     if (!q) {
-      this.found = [];
-      this.gs.classList.remove('open');
+      // An empty box offers the best next stars, so a new direction is one click away.
+      const cur = this.engine.current;
+      this.found = cur ? suggestNext(cur.nodes, this.engine.visited) : [];
+      const fresh = !this.gs.classList.contains('open');
+      this.renderSuggestions('', fresh);
+      this.gs.classList.toggle('open', this.found.length > 0);
       return;
     }
     let found: Suggestion[];
@@ -261,25 +633,56 @@ export class Play {
     }
     if (seq !== this.suggestSeq) return;
     this.found = found;
+    const fresh = !this.gs.classList.contains('open');
+    this.renderSuggestions(q, fresh);
     this.gs.classList.add('open');
-    this.renderSuggestions(q);
   }
 
-  private renderSuggestions(q: string): void {
+  /** Draw the list. `fresh` plays the staggered entrance, used only when the list opens, not on every keystroke. */
+  private renderSuggestions(q: string, fresh = false): void {
     const gs = this.gs;
+    gs.classList.toggle('fresh', fresh);
     if (!this.found.length) {
-      gs.innerHTML = "<li style='color:var(--space-redlink);cursor:default'>" + esc(q) + '<span>no such article ' + esc(this.copy.missing) + '</span></li>';
+      gs.innerHTML =
+        "<li class='none' role='option' aria-disabled='true'><span class='t'>" + esc(q) + "</span><span class='d'>no such article " + esc(this.copy.missing) + '</span></li>';
       return;
     }
     if (this.sel >= this.found.length) this.sel = 0;
     gs.innerHTML = this.found
       .map((s, i) => {
         const t = s.title;
-        const k = t.toLowerCase().indexOf(q.toLowerCase());
+        const k = q ? t.toLowerCase().indexOf(q.toLowerCase()) : -1;
         const h = k >= 0 ? esc(t.slice(0, k)) + '<mark>' + esc(t.slice(k, k + q.length)) + '</mark>' + esc(t.slice(k + q.length)) : esc(t);
-        return "<li role='option' data-i='" + i + "' class='" + (i === this.sel ? 'on' : '') + "'>" + h + '<span>' + esc(s.description ?? '') + '</span></li>';
+        const d = s.description ? "<span class='d'>" + esc(s.description) + '</span>' : '';
+        return (
+          "<li role='option' data-i='" +
+          i +
+          "' style='--i:" +
+          Math.min(i, 8) +
+          "' aria-selected='" +
+          (i === this.sel) +
+          "' class='" +
+          (i === this.sel ? 'on' : '') +
+          "'>" +
+          "<span class='t'>" +
+          h +
+          '</span>' +
+          d +
+          '</li>'
+        );
       })
       .join('');
+  }
+
+  /** Move the highlight without rebuilding the list, so arrow keys and hover never replay the entrance. */
+  private select(i: number, scroll = false): void {
+    this.sel = i;
+    this.gs.querySelectorAll<HTMLElement>('li[data-i]').forEach((li) => {
+      const on = Number(li.dataset.i) === i;
+      li.classList.toggle('on', on);
+      li.setAttribute('aria-selected', String(on));
+      if (on && scroll) li.scrollIntoView({ block: 'nearest' });
+    });
   }
 
   /* ---------- wiring ---------- */
@@ -299,26 +702,72 @@ export class Play {
         gq.blur();
         return;
       }
-      if (!this.found.length) return;
-      if (e.key === 'ArrowDown') this.sel = (this.sel + 1) % this.found.length;
-      else if (e.key === 'ArrowUp') this.sel = (this.sel + this.found.length - 1) % this.found.length;
+      if (!this.found.length) {
+        // Enter on text with no suggestion yet still tries the article: the provider follows redirects.
+        if (e.key === 'Enter' && gq.value.trim()) this.choose(gq.value.trim());
+        return;
+      }
+      if (e.key === 'ArrowDown') this.select((this.sel + 1) % this.found.length, true);
+      else if (e.key === 'ArrowUp') this.select((this.sel + this.found.length - 1) % this.found.length, true);
       else if (e.key === 'Enter') {
         const hit = this.found[this.sel];
         if (hit) this.choose(hit.title);
         return;
       } else return;
       e.preventDefault();
-      this.renderSuggestions(gq.value.trim());
     });
     gs.addEventListener('mousedown', (e) => e.preventDefault());
+    gs.addEventListener('mousemove', (e) => {
+      const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-i]');
+      if (li && Number(li.dataset.i) !== this.sel) this.select(Number(li.dataset.i));
+    });
     gs.addEventListener('click', (e) => {
       const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-i]');
       const hit = li ? this.found[Number(li.dataset.i)] : undefined;
       if (hit) this.choose(hit.title);
     });
-    initKeyboard(gq, this.isOpen);
+    initKeyboard(gq, () => this.isOpen() && !this.atlas?.isOpen, { map: engine, go: (title) => void this.navigate(title) });
 
+    document.addEventListener('keydown', (e) => {
+      const t = e.target;
+      const typing = t instanceof HTMLElement && (t.isContentEditable || t.matches('input, textarea, select, button, a'));
+      if (e.key === 'n' && this.isOpen() && !this.atlas?.isOpen && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        void this.newChain();
+      }
+    });
+    const atlas = new Atlas({ collection: this.collection, open: (title) => void this.open(title) });
+    this.atlas = atlas;
+    $('skyBtn').addEventListener('click', () => {
+      if (atlas.isOpen) return atlas.close();
+      if (this.tour.open) this.tour.finish();
+      atlas.open();
+    });
+    // The atlas is a sheet over the map: anything outside it, or Escape, puts it away.
+    document.addEventListener('pointerdown', (e) => {
+      const t = e.target;
+      if (atlas.isOpen && t instanceof Element && !t.closest('#atlas, #skyBtn')) atlas.close(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && atlas.isOpen) atlas.close();
+    });
+    this.gq.addEventListener('focus', () => atlas.close(false));
     $('surprise').addEventListener('click', () => void this.surprise());
+    const snd = $('snd');
+    const paintSound = (): void => {
+      snd.setAttribute('aria-pressed', String(this.sound.enabled));
+      snd.title = this.sound.enabled ? 'Sound is on' : 'Sound is off';
+      snd.setAttribute('aria-label', snd.title);
+    };
+    paintSound();
+    snd.addEventListener('click', () => {
+      this.sound.set(!this.sound.enabled);
+      paintSound();
+    });
+    $('tourbtn').addEventListener('click', () => {
+      this.atlas?.close(false);
+      this.tour.start();
+    });
     $('zin').addEventListener('click', () => engine.zoomBy(1.4));
     $('zout').addEventListener('click', () => engine.zoomBy(1 / 1.4));
     $('zfit').addEventListener('click', () => engine.fit());
@@ -331,14 +780,40 @@ export class Play {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-mode]');
       const m = b?.dataset.mode;
       if (!m) return;
-      const soon = SOON[m];
-      if (soon) this.toast(soon);
+      if (m === 'drift') this.startDrift();
       else if (m === 'race') void this.newRace();
+      else if (m === 'daily') void this.startDaily();
+      else if (m === 'connect') void this.startConnect();
       else this.setMode('explore');
+    });
+    $('hud').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const data = new FormData(e.target as HTMLFormElement);
+      void this.connect.run(String(data.get('from') ?? ''), String(data.get('to') ?? ''));
+    });
+    $('hud').addEventListener('focusin', (e) => {
+      if (e.target instanceof HTMLInputElement && !e.target.value) void this.connectSuggest(e.target);
+    });
+    $('hud').addEventListener('input', (e) => {
+      if (e.target instanceof HTMLInputElement) void this.connectSuggest(e.target);
     });
     $('hud').addEventListener('click', (e) => {
       const id = (e.target as HTMLElement).id;
-      if (id === 'again') void this.newRace();
+      const rule = (e.target as HTMLElement).closest<HTMLElement>('[data-rule]')?.dataset.rule;
+      if (rule === 'places' || rule === 'backtracks' || rule === 'blitz') return void this.toggleRule(rule);
+      const hop = (e.target as HTMLElement).closest<HTMLElement>('[data-t]')?.dataset.t;
+      if (hop) {
+        this.connect.halt();
+        void this.navigate(hop);
+      } else if (id === 'creplay') void this.connect.replay();
+      else if (id === 'cstop') this.connect.halt();
+      else if (id === 'cnew') this.connect.start();
+      else if (id === 'csurprise') void this.surprisePair();
+      else if (id === 'reveal') void this.reveal();
+      else if (id === 'again') void this.newRace();
+      else if (id === 'retry') void this.retryRace();
+      else if (id === 'dtoggle') void this.startDaily(!this.race?.hard);
+      else if (id === 'share') void this.shareDaily();
       else if (id === 'quit') this.setMode('explore');
     });
 

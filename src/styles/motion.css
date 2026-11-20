@@ -1,0 +1,141 @@
+/*
+ * The site-wide motion system. Durations, easings and distances are tokens in tokens.css.
+ * Pages, the map, the side menu, the panel and anchor jumps all use the keyframes below,
+ * so the whole site moves with one voice: things rise a little and fade in, quickly and then settle.
+ * The map's own travel animation lives in src/engine/config.ts and is not touched here.
+ */
+@keyframes m-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes m-rise {
+  from {
+    opacity: 0;
+    transform: translateY(var(--rise));
+  }
+}
+@keyframes m-drop {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--rise) * -0.7));
+  }
+}
+@keyframes m-slide-left {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--rise) * 2));
+  }
+}
+@keyframes m-flash {
+  0% {
+    background-color: color-mix(in srgb, var(--link) 26%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* first load and reload: the header settles in, then the page rises */
+.vh {
+  animation: m-drop var(--dur-slow) var(--ease-out) both;
+}
+
+/* switching between the main page and the map */
+#page-main-page.on {
+  animation: m-fade var(--dur-slow) var(--ease-out) both;
+}
+#page-main-page.on > * {
+  animation: m-rise var(--dur-enter) var(--ease-out) both;
+  animation-delay: calc(var(--stagger) * var(--i, 0));
+}
+#page-main-page.on > :nth-child(1) {
+  --i: 0;
+}
+#page-main-page.on > :nth-child(2) {
+  --i: 1;
+}
+#page-main-page.on > :nth-child(3) {
+  --i: 2;
+}
+#page-main-page.on > :nth-child(4) {
+  --i: 3;
+}
+#page-main-page.on > :nth-child(5) {
+  --i: 4;
+}
+#page-main-page.on > :nth-child(n + 6) {
+  --i: 5;
+}
+body[data-view='play'] #play {
+  animation: m-fade var(--dur-enter) var(--ease-out) both;
+}
+body[data-view='play'] #panel {
+  animation: m-slide-left var(--dur-enter) var(--ease-out) 120ms both;
+}
+
+/* a new star opens a new article in the panel: its contents rise in one after another */
+#panel.swap > * {
+  animation: m-rise var(--dur-slow) var(--ease-out) both;
+}
+#panel.swap > :nth-child(2) {
+  animation-delay: var(--stagger);
+}
+#panel.swap > :nth-child(3) {
+  animation-delay: calc(var(--stagger) * 2);
+}
+#panel.swap > :nth-child(n + 4) {
+  animation-delay: calc(var(--stagger) * 3);
+}
+#hud.on {
+  animation: m-rise var(--dur-base) var(--ease-out) both;
+}
+
+/* jumping to a heading or section: it lights up briefly so the eye finds it */
+.flash {
+  animation: m-flash 1.4s var(--ease-out) both;
+  scroll-margin-top: 72px;
+}
+
+/* the side menu folds open and shut on narrow screens */
+@media (max-width: 900px) {
+  .vside {
+    display: block;
+    max-height: 0;
+    padding: 0 4px;
+    overflow: hidden;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(calc(var(--rise) * -0.5));
+    transition:
+      max-height var(--dur-base) var(--ease-out),
+      opacity var(--dur-base) var(--ease-out),
+      transform var(--dur-base) var(--ease-out),
+      visibility 0s linear var(--dur-base);
+  }
+  .vside.open {
+    max-height: 90vh;
+    overflow: auto;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    transition-delay: 0s;
+  }
+}
+.vh .menu {
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+/* with reduced motion, everything arrives finished: no rise, no fade, no flash, no smooth scroll */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}

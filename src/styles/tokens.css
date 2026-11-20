@@ -2,14 +2,14 @@
    Layout idea: two worlds. The site around the game is an encyclopedia page (header, sidebar, tabs, boxes, footer).
    The game is open space: one glowing constellation that grows as you travel. The logo and link colors bridge them. */
 :root {
-  --page: #f8f9fa; /* chrome behind the article */
+  --page: #f4f5fb; /* the sky behind the cards */
   --surface: #ffffff; /* the article itself */
   --ink: #202122;
   --muted: #54595d;
-  --rule: #a2a9b1;
-  --rule-soft: #c8ccd1;
-  --tint: #eaecf0; /* box headers, infobox */
-  --link: #3366cc;
+  --rule: #c3c7d8;
+  --rule-soft: #dde0ec;
+  --tint: #eceef8; /* soft fills, hover, inset wells */
+  --link: #3a5fd0;
   --visited: #6b4ba1;
   --redlink: #bf3c2c;
   --star: #3366cc; /* logo star edge */
@@ -22,6 +22,9 @@
   --neb-blue: #6ea3ff;
   --neb-violet: #a48bf5;
   --neb-rose: #f08aa9;
+  --neb-blue-rgb: 110, 163, 255;
+  --neb-violet-rgb: 164, 139, 245;
+  --neb-rose-rgb: 240, 138, 169;
   --serif: 'Linux Libertine', 'Libertinus Serif', Georgia, Times, 'Source Serif 4', serif;
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Lato, Helvetica, Arial, sans-serif;
   --logo: 'Source Serif 4', Georgia, serif;
@@ -30,13 +33,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --page: #0c0d10;
-    --surface: #121419;
+    --page: #090a0f;
+    --surface: #12141b;
     --ink: #e9e7e1;
     --muted: #a2a5ae;
-    --rule: #454a54;
-    --rule-soft: #2f333b;
-    --tint: #1b1e25;
+    --rule: #3a3f4d;
+    --rule-soft: #262a35;
+    --tint: #1a1d27;
     --link: #7aa9ff;
     --visited: #b59cf2;
     --redlink: #ff7b6e;
@@ -46,13 +49,13 @@
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --page: #0c0d10;
-  --surface: #121419;
+  --page: #090a0f;
+  --surface: #12141b;
   --ink: #e9e7e1;
   --muted: #a2a5ae;
-  --rule: #454a54;
-  --rule-soft: #2f333b;
-  --tint: #1b1e25;
+  --rule: #3a3f4d;
+  --rule-soft: #262a35;
+  --tint: #1a1d27;
   --link: #7aa9ff;
   --visited: #b59cf2;
   --redlink: #ff7b6e;
@@ -87,21 +90,107 @@
   --trail-rgb: 192, 168, 247;
   --dust-a-rgb: 200, 190, 255;
   --dust-b-rgb: 220, 230, 255;
-  /* the twelve subject colour families */
+  /* the twelve subject colour families. The four greens (urban planning, sustainable design, biology,
+     geography) were retuned from the mockup so that no two of them sit close together, and philosophy was moved away from astronomy. */
   --subject-architecture: 255, 190, 120;
-  --subject-urban-planning: 176, 226, 110;
+  --subject-urban-planning: 204, 234, 90;
   --subject-civil-engineering: 110, 163, 255;
-  --subject-sustainable-design: 96, 220, 160;
+  --subject-sustainable-design: 88, 220, 108;
   --subject-astronomy: 164, 139, 245;
   --subject-music: 240, 138, 169;
-  --subject-biology: 84, 214, 208;
-  --subject-philosophy: 201, 168, 255;
+  --subject-biology: 36, 204, 190;
+  --subject-philosophy: 238, 194, 255;
   --subject-computer-science: 98, 200, 255;
   --subject-history: 255, 224, 110;
-  --subject-geography: 130, 214, 180;
+  --subject-geography: 176, 236, 208;
   --subject-video-game: 232, 121, 216;
   /* timing used by CSS; canvas timings live in src/engine/config.ts */
   --t-logo-twinkle: 7s;
   --t-tint-shift: 1.4s;
   --t-nebula-drift: 46s;
+  --t-gradient-flow: 9s;
+  --t-glow-pulse: 5s;
+  --tint-blue: rgba(110, 163, 255, 0.14);
+  --tint-violet: rgba(164, 139, 245, 0.16);
+  --tint-rose: rgba(240, 138, 169, 0.14);
+  /* the shared motion scale: every CSS transition and animation on the site draws from these, and src/styles/motion.ts reads the same names */
+  --dur-fast: 140ms;
+  --dur-base: 260ms;
+  --dur-slow: 480ms;
+  --dur-enter: 720ms;
+  --stagger: 55ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --rise: 14px;
+}
+
+/* modern layer: shape, depth and washes shared by the site and the map */
+:root {
+  --radius: 16px;
+  --radius-sm: 10px;
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-line: rgba(60, 70, 120, 0.14);
+  --card-shadow: 0 1px 2px rgba(30, 35, 70, 0.06), 0 12px 32px -12px rgba(30, 35, 90, 0.16);
+  --wash:
+    radial-gradient(60% 40% at 12% -6%, rgba(110, 163, 255, 0.16), transparent 70%), radial-gradient(46% 36% at 92% 4%, rgba(164, 139, 245, 0.14), transparent 70%),
+    radial-gradient(40% 30% at 70% 100%, rgba(240, 138, 169, 0.08), transparent 70%);
+  --hero-wash:
+    radial-gradient(70% 90% at 15% 0%, rgba(110, 163, 255, 0.2), transparent 70%), radial-gradient(60% 80% at 90% 20%, rgba(164, 139, 245, 0.18), transparent 70%),
+    radial-gradient(50% 70% at 60% 110%, rgba(240, 138, 169, 0.14), transparent 70%);
+  --sweep: linear-gradient(90deg, var(--neb-blue), var(--neb-violet), var(--neb-rose));
+  --sweep-flow: linear-gradient(90deg, var(--neb-blue), var(--neb-violet), var(--neb-rose), var(--neb-violet), var(--neb-blue));
+  --focus-ring: 0 0 0 3px rgba(110, 163, 255, 0.35);
+  /* the map's glass: always night */
+  --night-glass: rgba(14, 16, 24, 0.72);
+  --night-line: rgba(255, 255, 255, 0.12);
+  --night-shadow: 0 18px 48px -16px rgba(0, 0, 0, 0.7);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --glass: rgba(18, 20, 28, 0.72);
+    --glass-line: rgba(255, 255, 255, 0.09);
+    --card-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 18px 40px -18px rgba(0, 0, 0, 0.7);
+    --wash:
+      radial-gradient(60% 40% at 12% -6%, rgba(110, 163, 255, 0.14), transparent 70%), radial-gradient(46% 36% at 92% 4%, rgba(164, 139, 245, 0.13), transparent 70%),
+      radial-gradient(40% 30% at 70% 100%, rgba(240, 138, 169, 0.07), transparent 70%);
+  }
+}
+:root[data-theme='dark'] {
+  --glass: rgba(18, 20, 28, 0.72);
+  --glass-line: rgba(255, 255, 255, 0.09);
+  --card-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 18px 40px -18px rgba(0, 0, 0, 0.7);
+}
+
+/* surfaces: the shared depth, edge light and splotch glows that every card, box and menu draws from (see surfaces.css) */
+:root {
+  --splotch-a: 0.2; /* strength of the corner glows on the daytime site */
+  --edge-hi: rgba(255, 255, 255, 0.9); /* the lit top edge of a raised surface */
+  --edge-lo: rgba(60, 70, 120, 0.1);
+  --elev-1: 0 1px 1px rgba(30, 35, 70, 0.05), 0 4px 10px -4px rgba(30, 35, 90, 0.1);
+  --elev-2: 0 1px 2px rgba(30, 35, 70, 0.06), 0 10px 24px -10px rgba(30, 35, 90, 0.2), 0 28px 48px -28px rgba(60, 60, 160, 0.22);
+  --elev-3: 0 2px 4px rgba(30, 35, 70, 0.08), 0 18px 36px -12px rgba(30, 35, 90, 0.26), 0 40px 70px -30px rgba(80, 70, 190, 0.3);
+  --spec-rgb: var(--white-rgb);
+  --tilt: 5deg;
+  --g1: var(--neb-blue-rgb);
+  --g2: var(--neb-violet-rgb);
+  --g3: var(--neb-rose-rgb);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --splotch-a: 0.26;
+    --edge-hi: rgba(255, 255, 255, 0.11);
+    --edge-lo: rgba(0, 0, 0, 0.5);
+    --elev-1: 0 1px 1px rgba(0, 0, 0, 0.4), 0 4px 10px -4px rgba(0, 0, 0, 0.5);
+    --elev-2: 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 26px -10px rgba(0, 0, 0, 0.7), 0 30px 50px -30px rgba(var(--neb-violet-rgb), 0.28);
+    --elev-3: 0 2px 4px rgba(0, 0, 0, 0.5), 0 20px 40px -12px rgba(0, 0, 0, 0.75), 0 44px 70px -30px rgba(var(--neb-violet-rgb), 0.38);
+  }
+}
+:root[data-theme='dark'] {
+  --splotch-a: 0.26;
+  --edge-hi: rgba(255, 255, 255, 0.11);
+  --edge-lo: rgba(0, 0, 0, 0.5);
+  --elev-1: 0 1px 1px rgba(0, 0, 0, 0.4), 0 4px 10px -4px rgba(0, 0, 0, 0.5);
+  --elev-2: 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 26px -10px rgba(0, 0, 0, 0.7), 0 30px 50px -30px rgba(var(--neb-violet-rgb), 0.28);
+  --elev-3: 0 2px 4px rgba(0, 0, 0, 0.5), 0 20px 40px -12px rgba(0, 0, 0, 0.75), 0 44px 70px -30px rgba(var(--neb-violet-rgb), 0.38);
 }

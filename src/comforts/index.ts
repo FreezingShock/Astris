@@ -1,3 +1,14 @@
-export { Tip, relations } from './tip';
+export { Tip, relations, tieLine, tieWord, firstLine, previewHtml, PREVIEW_DELAY } from './tip';
+export type { SummarySource } from './tip';
 export { Discovery } from './discovery';
-export { initKeyboard } from './keyboard';
+export type { DiscoveryStore } from './discovery';
+export { initKeyboard, StarCursor, nextStar, announce } from './keyboard';
+export type { Direction, KeyTravel, StarReach } from './keyboard';
+export { Share, readShare, shareSearch, shareUrl, shareNote } from './share';
+export type { ShareState, ShareOptions } from './share';
+export { Sound, noteFor, flourish, tierOf, SOUND_KEY } from './sound';
+export type { Tier } from './sound';
+export { Celebration, makeSparks, stepSparks, SPARKS } from './celebrate';
+export type { Spark } from './celebrate';
+export { Tour, TOUR_STEPS, TOUR_KEY } from './tour';
+export type { TourStep, TourOptions } from './tour';
