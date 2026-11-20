@@ -3,6 +3,7 @@ import { clock, esc } from '../lib';
 import { subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
 import { Discovery, Tip, initKeyboard } from '../comforts';
+import { UNREACHABLE_NOTE, failureOf } from './failure';
 import { legendHtml, panelHtml } from './panel';
 import { PICKING_HTML, beginRace, hudHtml, par, randomPair, stepRace, type Race } from './race';
 
@@ -207,8 +208,10 @@ export class Play {
     try {
       const data = await this.provider.constellation(title);
       return seq === this.seq ? data : null;
-    } catch {
-      if (seq === this.seq) this.missing(title);
+    } catch (err) {
+      const why = failureOf(err);
+      if (seq === this.seq && why === 'missing') this.missing(title);
+      else if (seq === this.seq && why === 'unreachable') this.toast(UNREACHABLE_NOTE);
       return null;
     }
   }

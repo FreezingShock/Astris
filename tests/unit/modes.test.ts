@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SampleProvider } from '../../src/data';
+import { failureOf } from '../../src/modes/failure';
 import { Graph, graphOf, route } from '../../src/modes/graph';
 import { PAR_BUDGET, beginRace, hudHtml, par, randomPair, stepRace } from '../../src/modes/race';
 import { safeUrl, summaryHtml } from '../../src/modes/summary';
@@ -65,7 +66,10 @@ describe('par', () => {
       const from = titles[i] ?? '';
       const to = titles[(i * 5 + 3) % titles.length] ?? '';
       const truth = await trueDistance(provider, from, to);
-      expect(await par(new SampleProvider(), from, to, 4, 1000), from + ' to ' + to).toBe(truth > 4 ? -1 : truth);
+      expect(await par(new SampleProvider(), from, to, 4, 1000, Infinity), from + ' to ' + to).toBe(truth > 4 ? -1 : truth);
+      // The light search may miss a chain, but one it reports is real, so it is never below the true distance.
+      const light = await par(new SampleProvider(), from, to);
+      if (light >= 0) expect(light, from + ' to ' + to).toBeGreaterThanOrEqual(truth);
     }
   });
 
@@ -73,6 +77,7 @@ describe('par', () => {
     const counted = fake(Object.fromEntries(await Promise.all(SampleProvider.titles.map(async (t) => [t, await provider.neighbours(t)] as const))));
     expect(await par(counted, 'Brutalist architecture', 'Jazz')).toBe(4);
     expect(counted.calls.length).toBeLessThanOrEqual(PAR_BUDGET + 4);
+    expect(counted.calls.length * 7).toBeLessThan(100);
     expect(new Set(counted.calls).size).toBe(counted.calls.length);
     const before = counted.calls.length;
     expect(await par(counted, 'Brutalist architecture', 'Jazz')).toBe(4);
@@ -125,7 +130,7 @@ describe('randomPair', () => {
     const counted = fake(Object.fromEntries(await Promise.all(SampleProvider.titles.map(async (t) => [t, await sample.neighbours(t)] as const))));
     counted.random = () => sample.random();
     await randomPair(counted);
-    expect(counted.calls.length).toBeLessThanOrEqual(3 * (16 + 8 + 4));
+    expect(counted.calls.length).toBeLessThanOrEqual(3 * (16 + 3 + 4));
     expect(graphOf(counted)).toBe(graphOf(counted));
   });
 });
@@ -188,5 +193,17 @@ describe('the article summary in the panel', () => {
     expect(empty).toContain('no summary');
     expect(empty).not.toContain('CC BY-SA');
     expect(summaryHtml('Jazz', { title: 'Jazz', extract: '', url: '' })).not.toContain('<a ');
+  });
+});
+
+describe('a failed request', () => {
+  const named = (name: string): Error => Object.assign(new Error('x'), { name });
+
+  it('is a missing article unless the network, the server or a cancel caused it', () => {
+    expect(failureOf(new Error('No article called "Zzqx"'))).toBe('missing');
+    expect(failureOf(named('ArticleNotFoundError'))).toBe('missing');
+    expect(failureOf(new TypeError('Failed to fetch'))).toBe('unreachable');
+    expect(failureOf(named('HttpError'))).toBe('unreachable');
+    expect(failureOf(named('AbortError'))).toBe('cancelled');
   });
 });
