@@ -3,6 +3,7 @@ import './styles/tokens.css';
 import './styles/base.css';
 import './site/site.css';
 import './modes/play.css';
+import './styles/surfaces.css';
 import './styles/responsive.css';
 import './styles/motion.css';
 
@@ -10,6 +11,7 @@ import { SampleProvider, WikipediaProvider } from './data';
 import { Play, type SourceCopy } from './modes';
 import { Site } from './site';
 import { stylesReady } from './styles';
+import { initTilt } from './styles/tilt';
 import type { DataProvider } from './types';
 
 /**
@@ -31,6 +33,7 @@ const copy: SourceCopy = live
       panelNote: 'Sample entry. The finished site shows the Wikipedia article here.',
     };
 
+initTilt();
 void stylesReady().then(() => {
   // Play asks the site whether the map is open, and the site is built after Play.
   const state: { site: Site | null } = { site: null };

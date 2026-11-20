@@ -1,0 +1,343 @@
+/*
+ * One surface system for the whole site: every box, menu, card, popover and tile is a raised sheet of glass
+ * with (1) a lit top edge and layered shadow for depth, (2) soft splotch glows of nebula colour bleeding in from its corners,
+ * (3) a small four-point star ornament, and (4) encyclopedia typography: serif titles, ruled headings and [n] reference marks.
+ * Hue per surface comes from --g1/--g2/--g3 (RGB triples). Tilt and the pointer sheen are driven by src/styles/tilt.ts.
+ * Loaded after the module stylesheets so it is the one place that decides how a surface looks.
+ */
+@property --rx {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@property --ry {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@property --spec {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+/* the splotch: three overlapping glows, each from a different corner */
+:root {
+  --splotch:
+    radial-gradient(70% 60% at 0% 0%, rgba(var(--g1), var(--splotch-a)), transparent 70%),
+    radial-gradient(65% 70% at 100% 100%, rgba(var(--g2), var(--splotch-a)), transparent 72%),
+    radial-gradient(45% 45% at 88% 8%, rgba(var(--g3), calc(var(--splotch-a) * 0.7)), transparent 70%);
+  --sheen: radial-gradient(260px circle at var(--mx, 50%) var(--my, 0%), rgba(var(--spec-rgb), calc(var(--spec) * 0.22)), transparent 65%);
+}
+
+/* ---------- site surfaces ---------- */
+.box,
+.vside,
+.tile,
+.recent,
+.welcome {
+  position: relative;
+  isolation: isolate;
+  background: var(--sheen), var(--splotch), var(--surface);
+  border-color: var(--glass-line);
+  box-shadow:
+    inset 0 1px 0 var(--edge-hi),
+    inset 0 -1px 0 var(--edge-lo),
+    var(--elev-2);
+  transform: perspective(1000px) rotateX(var(--rx)) rotateY(var(--ry));
+  transition:
+    transform var(--dur-slow) var(--ease-out),
+    --spec var(--dur-base) ease,
+    box-shadow var(--dur-base) ease;
+}
+.box.a,
+.tile:nth-child(3n + 1) {
+  --g1: var(--neb-blue-rgb);
+  --g2: var(--neb-violet-rgb);
+  --g3: var(--neb-rose-rgb);
+}
+.box.b,
+.tile:nth-child(3n + 2) {
+  --g1: var(--neb-violet-rgb);
+  --g2: var(--neb-rose-rgb);
+  --g3: var(--neb-blue-rgb);
+}
+.box.c,
+.tile:nth-child(3n) {
+  --g1: var(--neb-rose-rgb);
+  --g2: var(--neb-blue-rgb);
+  --g3: var(--neb-violet-rgb);
+}
+.box:hover,
+.tile:hover {
+  box-shadow:
+    inset 0 1px 0 var(--edge-hi),
+    inset 0 -1px 0 var(--edge-lo),
+    var(--elev-3);
+}
+.box > *,
+.welcome > * {
+  position: relative;
+  z-index: 1;
+}
+.vside {
+  position: sticky;
+}
+
+/* a blurred bloom bleeding up from the bottom edge: the splotch that replaces the old thin line */
+.box::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  left: -10%;
+  right: -10%;
+  bottom: -46px;
+  height: 90px;
+  pointer-events: none;
+  background:
+    radial-gradient(50% 100% at 20% 100%, rgba(var(--g1), 0.5), transparent 70%), radial-gradient(45% 100% at 62% 100%, rgba(var(--g2), 0.42), transparent 70%),
+    radial-gradient(40% 100% at 94% 100%, rgba(var(--g3), 0.36), transparent 70%);
+  filter: blur(14px);
+  opacity: calc(var(--splotch-a) * 3);
+}
+/* the star ornament: the logo's four-point star, tucked in a corner */
+.box::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: 15px;
+  right: 16px;
+  width: 13px;
+  height: 13px;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--star-core), var(--star));
+  clip-path: polygon(50% 0, 58% 42%, 100% 50%, 58% 58%, 50% 100%, 42% 58%, 0 50%, 42% 42%);
+  filter: drop-shadow(0 0 4px rgba(var(--g1), 0.9));
+  opacity: 0.85;
+  animation: twinkle var(--t-logo-twinkle) ease-in-out infinite;
+}
+
+/* the hero: big drifting splotch glows in place of the line */
+.welcome {
+  background: var(--sheen), var(--hero-wash), var(--surface);
+}
+.welcome::before {
+  inset: auto -8% -42% -8%;
+  height: 100%;
+  opacity: min(1, calc(var(--splotch-a) * 4.4));
+  background:
+    radial-gradient(38% 80% at 16% 100%, rgba(var(--neb-blue-rgb), 0.95), transparent 70%), radial-gradient(34% 90% at 50% 105%, rgba(var(--neb-violet-rgb), 0.9), transparent 70%),
+    radial-gradient(36% 80% at 86% 100%, rgba(var(--neb-rose-rgb), 0.85), transparent 70%);
+  filter: blur(30px);
+  animation: splotch-drift calc(var(--t-gradient-flow) * 2) ease-in-out infinite alternate;
+  will-change: transform;
+}
+.welcome::after {
+  inset: -22% -10% auto auto;
+  left: auto;
+  right: -4%;
+  bottom: auto;
+  top: -20%;
+  width: 46%;
+  height: 70%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(var(--neb-violet-rgb), 0.55), transparent);
+  box-shadow: none;
+  filter: blur(34px);
+  opacity: calc(var(--splotch-a) * 2.4);
+  animation: splotch-drift calc(var(--t-gradient-flow) * 2.6) ease-in-out infinite alternate-reverse;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes splotch-drift {
+  from {
+    transform: translate3d(-3%, 2%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(3%, -4%, 0) scale(1.12);
+  }
+}
+
+/* encyclopedia typography: serif titles on a ruled line, with a reference mark */
+.cols {
+  counter-reset: ref;
+}
+.box > h2 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 20px;
+  letter-spacing: 0;
+  margin: 0 18px;
+  padding: 14px 18px 6px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  background-image: linear-gradient(90deg, rgba(var(--g1), 0.7), rgba(var(--g2), 0.5) 40%, transparent 75%);
+  background-size: 100% 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+}
+.box > h2::after {
+  counter-increment: ref;
+  content: '[' counter(ref) ']';
+  margin-left: auto;
+  margin-right: 22px;
+  align-self: flex-start;
+  font: 500 10.5px/1 var(--mono);
+  color: var(--link);
+  opacity: 0.8;
+}
+.box > .in {
+  padding-top: 14px;
+}
+.vside h3 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  border-radius: 0;
+  padding: 4px 4px 5px;
+  background: none;
+  border-bottom: 1px solid var(--rule-soft);
+  background-image: linear-gradient(90deg, rgba(var(--g1), 0.8), rgba(var(--g2), 0.55) 55%, transparent);
+  background-size: 100% 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+}
+.vside li a {
+  margin: 2px 0 8px;
+  padding-left: 14px;
+  position: relative;
+  transition:
+    color var(--dur-fast) ease,
+    padding var(--dur-base) var(--ease-out);
+}
+.vside li a::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: var(--link);
+  opacity: 0;
+  box-shadow: 0 0 8px 1px var(--link);
+  transition: opacity var(--dur-base) ease;
+}
+.vside li a:hover {
+  color: var(--link);
+  padding-left: 18px;
+  text-decoration: none;
+}
+.vside li a:hover::before {
+  opacity: 1;
+}
+.race {
+  font-family: var(--serif);
+}
+.vfoot {
+  position: relative;
+  border-top: 0;
+  font-family: var(--serif);
+}
+.vfoot::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(var(--g1), 0.9), rgba(var(--g2), 0.6) 50%, transparent);
+}
+
+/* ---------- the map's surfaces: night glass with a lit edge and a tinted halo ---------- */
+.card,
+.gzoom,
+.gsugg.open {
+  background: var(--splotch), var(--surface);
+  border-color: var(--night-line);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--white-rgb), 0.16),
+    inset 0 0 0 1px rgba(var(--white-rgb), 0.03),
+    0 18px 48px -16px rgba(0, 0, 0, 0.72),
+    0 0 46px -18px rgba(var(--g1), 0.55);
+  --splotch-a: 0.17;
+}
+#panel {
+  --g1: var(--neb-blue-rgb);
+  --g2: var(--neb-violet-rgb);
+  --g3: var(--neb-rose-rgb);
+}
+#hud {
+  --g1: var(--neb-violet-rgb);
+  --g2: var(--neb-rose-rgb);
+  --g3: var(--neb-blue-rgb);
+}
+#legend {
+  --g1: var(--neb-blue-rgb);
+  --g2: var(--neb-blue-rgb);
+  --g3: var(--neb-violet-rgb);
+}
+#tip,
+#toast {
+  --g1: var(--neb-rose-rgb);
+  --g2: var(--neb-violet-rgb);
+  --g3: var(--neb-blue-rgb);
+}
+#atlas {
+  --g1: var(--neb-violet-rgb);
+  --g2: var(--neb-blue-rgb);
+  --g3: var(--neb-rose-rgb);
+}
+#tour {
+  --g1: var(--neb-rose-rgb);
+  --g2: var(--neb-violet-rgb);
+  --g3: var(--neb-rose-rgb);
+}
+#legend b,
+#hud .day,
+#panel h2,
+#atlas h2,
+#tour b {
+  font-family: var(--serif);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+/* the article summary reads like a hatnote: italic serif behind a gradient rule */
+#panel .src {
+  font-family: var(--serif);
+  font-style: italic;
+  padding-left: 10px;
+  border-left: 2px solid transparent;
+  border-image: linear-gradient(180deg, rgb(var(--g1)), rgb(var(--g2))) 1;
+}
+.gbtn,
+.modes {
+  box-shadow: inset 0 1px 0 rgba(var(--white-rgb), 0.14);
+}
+.gsugg li.on {
+  box-shadow: inset 2px 0 0 var(--link);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .box,
+  .vside,
+  .tile,
+  .recent,
+  .welcome {
+    transform: none;
+    transition: none;
+  }
+  .box::after,
+  .welcome::before,
+  .welcome::after {
+    animation: none;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .box,
+  .vside,
+  .tile,
+  .recent,
+  .welcome {
+    transform: none;
+  }
+}
