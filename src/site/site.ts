@@ -2,7 +2,7 @@ import type { DataProvider } from '../types';
 import { prefersReducedMotion, subjectDotsHtml, subjectKeyHtml } from '../styles';
 import { MiniMap } from '../engine';
 import { par, type Play } from '../modes';
-import { isRouteName, pathOf, racePairOf, routeOf, type RouteName } from './router';
+import { articleOf, dispatchPlayLink, isRouteName, pathOf, racePairOf, routeOf, type RouteName } from './router';
 
 /** The article at the centre of the main page's small map. */
 const TODAY = 'Architecture';
@@ -50,8 +50,16 @@ export class Site {
     const name = routeOf(location);
     if (location.hash && isRouteName(location.hash.replace('#', ''))) history.replaceState(null, '', pathOf(name));
     this.show(name);
-    const pair = name === 'play' ? racePairOf(location.search) : null;
+    this.openPlayLink(name);
+  }
+
+  /** Act on the query of a /play address: a registered handler first, then a race pair, then a shared article. */
+  private openPlayLink(name: RouteName): void {
+    if (name !== 'play' || dispatchPlayLink(location.search)) return;
+    const pair = racePairOf(location.search);
+    const article = articleOf(location.search);
     if (pair) void this.play.startRace(pair.start, pair.target);
+    else if (article) void this.play.open(article);
   }
 
   /** Go to a surface and record it in the address bar. */
@@ -72,9 +80,16 @@ export class Site {
         else tab.removeAttribute('aria-current');
       }
       window.scrollTo(0, 0);
+      this.menu(false);
       this.play.leave();
     } else if (was !== 'play' || !this.play.engine.running) this.play.enter();
     this.miniTick();
+  }
+
+  /** Open or close the side menu. It only folds away on narrow screens. */
+  private menu(open: boolean): void {
+    $('vside').classList.toggle('open', open);
+    $('menuBtn').setAttribute('aria-expanded', String(open));
   }
 
   private miniTick(): void {
@@ -82,7 +97,11 @@ export class Site {
   }
 
   private bind(): void {
-    window.addEventListener('popstate', () => this.show(routeOf(location)));
+    window.addEventListener('popstate', () => {
+      const name = routeOf(location);
+      this.show(name);
+      this.openPlayLink(name);
+    });
     window.addEventListener('hashchange', () => {
       const hash = location.hash.replace('#', '');
       if (isRouteName(hash)) {
@@ -93,8 +112,11 @@ export class Site {
     document.addEventListener('click', (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>('[data-go],[data-race],[data-random],[data-topic],[data-scroll]');
       if (!a) return;
+      // A modified click on a real link opens a new tab, as links do.
+      if (a.hasAttribute('href') && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0)) return;
       const d = a.dataset;
       if (d.scroll) {
+        e.preventDefault();
         document.getElementById(d.scroll)?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
         return;
       }
@@ -109,7 +131,7 @@ export class Site {
       else if (d.random) setTimeout(() => void this.play.surprise(), 30);
       else if (topic) setTimeout(() => void this.play.open(topic), 30);
     });
-    $('menuBtn').addEventListener('click', () => $('vside').classList.toggle('open'));
+    $('menuBtn').addEventListener('click', () => this.menu(!$('vside').classList.contains('open')));
     $('vsearch').addEventListener('submit', (e) => {
       e.preventDefault();
       const typed = $<HTMLInputElement>('vq').value.trim();

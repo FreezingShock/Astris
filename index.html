@@ -21,25 +21,25 @@
 <!-- ======================= THE SITE ======================= -->
 <div id="site">
   <header class="vh">
-    <button class="menu" id="menuBtn" type="button" aria-label="Toggle main menu">&#9776;</button>
-    <a class="logo" data-go="main-page" aria-label="Astris, main page">Astr<span class="i">&#305;<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M30 0 Q33 27 60 30 Q33 33 30 60 Q27 33 0 30 Q27 27 30 0 Z" fill="url(#lg)"/></svg></span>s</a>
+    <button class="menu" id="menuBtn" type="button" aria-label="Toggle main menu" aria-controls="vside" aria-expanded="false">&#9776;</button>
+    <a class="logo" href="/" data-go="main-page" aria-label="Astris, main page">Astr<span class="i">&#305;<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M30 0 Q33 27 60 30 Q33 33 30 60 Q27 33 0 30 Q27 27 30 0 Z" fill="url(#lg)"/></svg></span>s</a>
     <form class="vsearch" id="vsearch" role="search">
       <input id="vq" type="search" placeholder="Search Astris" aria-label="Search Astris" autocomplete="off">
       <button type="submit">Search</button>
     </form>
     <nav class="vlinks" aria-label="Site">
-      <a data-go="play">Play</a><a data-race="1">Today's race</a><a data-go="design-system">Design system</a>
+      <a href="/play" data-go="play">Play</a><a href="/play?race=Brutalist%20architecture|Jazz" data-race="1">Today's race</a><a href="/design-system" data-go="design-system">Design system</a>
     </nav>
   </header>
 
   <div class="vbody">
     <nav class="vside" id="vside" aria-label="Main menu">
       <h3>Main menu</h3>
-      <ul><li><a data-go="main-page">Main page</a></li><li><a data-go="play">Open the map</a></li><li><a data-race="1">Today's race</a></li><li><a data-random="1">Random article</a></li></ul>
+      <ul><li><a href="/" data-go="main-page">Main page</a></li><li><a href="/play" data-go="play">Open the map</a></li><li><a href="/play?race=Brutalist%20architecture|Jazz" data-race="1">Today's race</a></li><li><a href="/play" data-random="1">Random article</a></li></ul>
       <h3>Modes</h3>
-      <ul><li><a data-go="play">Explore</a></li><li><a data-race="1">Race</a></li><li>Connect two <small>(planned)</small></li><li>Daily constellation <small>(planned)</small></li><li>Drift <small>(planned)</small></li></ul>
+      <ul><li><a href="/play" data-go="play">Explore</a></li><li><a href="/play?race=Brutalist%20architecture|Jazz" data-race="1">Race</a></li><li>Connect two <small>(planned)</small></li><li>Daily constellation <small>(planned)</small></li><li>Drift <small>(planned)</small></li></ul>
       <h3>Project</h3>
-      <ul><li><a data-go="design-system">Design system</a></li><li><a href="https://www.wikipedia.org/">Wikipedia</a></li></ul>
+      <ul><li><a href="/design-system" data-go="design-system">Design system</a></li><li><a href="https://www.wikipedia.org/">Wikipedia</a></li></ul>
     </nav>
 
     <main class="vmain">
@@ -51,7 +51,7 @@
       <!-- MAIN PAGE -->
       <section class="page" id="page-main-page">
         <div class="welcome">
-          <div class="big">Welcome to <a data-go="play">Astris</a>,</div>
+          <div class="big">Welcome to <a href="/play" data-go="play">Astris</a>,</div>
           <div>the map of everything <a href="https://www.wikipedia.org/">Wikipedia</a> connects.</div>
           <div class="sub" style="margin:4px 0 0">Search any article. Watch what it links to grow around it. Click a star to travel there.</div>
           <div class="cta"><button class="btn go" type="button" data-go="play">Open the map</button><button class="btn" type="button" data-race="1">Start today's race</button><button class="btn" type="button" data-random="1">Random article</button></div>
@@ -60,8 +60,8 @@
           <div>
             <div class="box a"><h2>Today's constellation</h2><div class="in">
               <div class="mini"><canvas id="mini" aria-label="A small glowing constellation around the article Architecture"></canvas></div>
-              <p><b><a data-topic="Architecture">Architecture</a></b> and the articles closest to it. The brightest stars link both ways and share its name. Fainter ones are a single link away.</p>
-              <p><a data-topic="Architecture"><b>Open this constellation</b></a> · <a data-random="1">Try a random one</a></p>
+              <p><b><a href="/play" data-topic="Architecture">Architecture</a></b> and the articles closest to it. The brightest stars link both ways and share its name. Fainter ones are a single link away.</p>
+              <p><a href="/play" data-topic="Architecture"><b>Open this constellation</b></a> · <a href="/play" data-random="1">Try a random one</a></p>
             </div></div>
             <div class="box b"><h2>How a star is ranked</h2><div class="in">
               <ul class="levels">
@@ -71,18 +71,18 @@
                 <li><span class="dot" style="--c:var(--rank-4);width:7px;height:7px"></span><span><b>4. One-way link.</b> A single link, out or in.</span></li>
                 <li><span class="dot" style="--c:var(--rank-5);width:5px;height:5px"></span><span><b>5. Name only.</b> Similar name, no link. Smallest, at the edge.</span></li>
               </ul>
-              <p style="margin-top:10px"><b>Colour is the subject.</b> Each subject gets its own light and its own wedge of the sky: <span id="topicKey"></span></p>
+              <p style="margin-top:10px"><b>Colour is the subject.</b> Each subject gets its own light and its own wedge of the sky:<br><span id="topicKey"></span></p>
             </div></div>
           </div>
           <div>
             <div class="box c"><h2>Today's race</h2><div class="in">
-              <div class="race"><a data-topic="Brutalist architecture">Brutalist architecture</a> <span>to</span> <a data-topic="Jazz">Jazz</a></div>
+              <div class="race"><a href="/play" data-topic="Brutalist architecture">Brutalist architecture</a> <span>to</span> <a href="/play" data-topic="Jazz">Jazz</a></div>
               <p>Get from the first article to the second by travelling star to star. Fewest clicks wins. <span id="parText"></span></p>
               <p><button class="btn go" type="button" data-race="1">Start the race</button></p>
             </div></div>
             <div class="box a"><h2>Modes</h2><div class="in"><ul>
-              <li><b><a data-go="play">Explore</a></b> <span class="tag live">in this mockup</span><br>Wander. The star you click becomes the centre and the sky regrows around it.</li>
-              <li><b><a data-race="1">Race</a></b> <span class="tag live">in this mockup</span><br>Two articles, a click counter, a timer and a par.</li>
+              <li><b><a href="/play" data-go="play">Explore</a></b> <span class="tag live">live</span><br>Wander. The star you click becomes the centre and the sky regrows around it.</li>
+              <li><b><a href="/play?race=Brutalist%20architecture|Jazz" data-race="1">Race</a></b> <span class="tag live">live</span><br>Two articles, a click counter, a timer and a par.</li>
               <li><b>Connect two</b> <span class="tag">planned</span><br>Type two topics and watch the shortest chain between them light up.</li>
               <li><b>Daily constellation</b> <span class="tag">planned</span><br>One pair a day, the same for everyone. Compare paths.</li>
               <li><b>Drift</b> <span class="tag">planned</span><br>The map explores itself. A screensaver for the curious.</li>
@@ -105,11 +105,11 @@
         <div class="infobox">
           <div class="cap">Astris</div>
           <div class="hero"><span class="logo">Astr<span class="i">&#305;<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M30 0 Q33 27 60 30 Q33 33 30 60 Q27 33 0 30 Q27 27 30 0 Z" fill="url(#lgn)"/></svg></span>s</span></div>
-          <dl><dt>Version</dt><dd>1, first full mockup</dd><dt>Worlds</dt><dd>Encyclopedia (site), Space (game)</dd><dt>Themes</dt><dd>Site follows light or dark. Game is always night.</dd><dt>Bridge</dt><dd>The logo and the link colors appear in both.</dd></dl>
+          <dl><dt>Version</dt><dd>1</dd><dt>Worlds</dt><dd>Encyclopedia (site), Space (game)</dd><dt>Themes</dt><dd>Site follows light or dark. Game is always night.</dd><dt>Bridge</dt><dd>The logo and the link colors appear in both.</dd></dl>
         </div>
         <p>The <b>Astris design system</b> has two halves. Everything around the game looks and reads like an encyclopedia: a header with search, a side menu, tabs, bordered boxes, serif headings on a hairline rule, and blue links. The game itself is open space, where the same articles become stars.</p>
         <div class="hat">This page is itself built from the system it describes.</div>
-        <div class="toc"><b>Contents</b><ol><li><a data-scroll="ds-colour">Colour</a></li><li><a data-scroll="ds-type">Type</a></li><li><a data-scroll="ds-links">Links</a></li><li><a data-scroll="ds-parts">Parts</a></li><li><a data-scroll="ds-space">Space</a></li><li><a data-scroll="ds-motion">Motion</a></li></ol></div>
+        <div class="toc"><b>Contents</b><ol><li><a href="#ds-colour" data-scroll="ds-colour">Colour</a></li><li><a href="#ds-type" data-scroll="ds-type">Type</a></li><li><a href="#ds-links" data-scroll="ds-links">Links</a></li><li><a href="#ds-parts" data-scroll="ds-parts">Parts</a></li><li><a href="#ds-space" data-scroll="ds-space">Space</a></li><li><a href="#ds-motion" data-scroll="ds-motion">Motion</a></li></ol></div>
 
         <h2 id="ds-colour">Colour <span class="edit">[encyclopedia]</span></h2>
         <div class="swatches">
@@ -138,14 +138,14 @@
         <p>Link colour always means the same thing, on the site and on the map: <a>an article that exists</a>, <a class="visited">one you have already visited</a>, and <a class="new">one that does not exist yet</a>. Links are never underlined until hovered.</p>
 
         <h2 id="ds-parts">Parts</h2>
-        <div class="demo"><button class="btn go" type="button">Primary action</button><button class="btn" type="button">Secondary</button><span class="tag live">in this mockup</span><span class="tag">planned</span>
+        <div class="demo"><button class="btn go" type="button">Primary action</button><button class="btn" type="button">Secondary</button><span class="tag live">live</span><span class="tag">planned</span>
           <span class="vsearch" style="max-width:260px"><input type="search" placeholder="Search field" aria-label="Example search field"><button type="button">Search</button></span></div>
         <p>Boxes have square corners, a one-pixel border and a tinted header. Nothing on the site casts a shadow or glows. Glow belongs to space.</p>
 
         <h2 id="ds-space">Space</h2>
         <div class="spacecard">
           <span class="logo" style="color:var(--starlight);font-size:34px">Astr<span class="i">&#305;<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M30 0 Q33 27 60 30 Q33 33 30 60 Q27 33 0 30 Q27 27 30 0 Z" fill="url(#lgn)"/></svg></span>s</span>
-          <span style="display:flex;gap:14px;align-items:center" id="topicDots"></span>
+          <span class="dots" id="topicDots"></span>
           <span style="font-size:13px;color:var(--dust);max-width:44ch">Stars are light, not shapes. Colour is the subject. Brightness and size carry the rank. Threads are thin and additive, so where many cross, the map gets brighter.</span>
         </div>
 
@@ -162,8 +162,9 @@
     </main>
 
     <footer class="vfoot">
-      <div>Astris is a mockup. Articles and links shown here are sample data. The finished site reads Wikipedia live; Wikipedia's text is available under the Creative Commons Attribution-ShareAlike 4.0 licence. Astris is not affiliated with or endorsed by the Wikimedia Foundation.</div>
-      <ul><li><a data-go="main-page">Main page</a></li><li><a data-go="play">Open the map</a></li><li><a data-go="design-system">Design system</a></li><li><a href="https://www.wikipedia.org/">Wikipedia</a></li></ul>
+      <div>Astris is built on <a href="https://www.wikipedia.org/">Wikipedia</a>. Article text comes from Wikipedia and is available under the <a href="https://creativecommons.org/licenses/by-sa/4.0/" rel="license">Creative Commons Attribution-ShareAlike 4.0</a> licence; every summary links to its article. Thumbnails come from Wikimedia Commons under their own licences, credited on the article they link to.</div>
+      <div>Astris is an independent project. It is not affiliated with or endorsed by the Wikimedia Foundation.</div>
+      <ul><li><a href="/" data-go="main-page">Main page</a></li><li><a href="/play" data-go="play">Open the map</a></li><li><a href="/design-system" data-go="design-system">Design system</a></li><li><a href="https://www.wikipedia.org/">Wikipedia</a></li></ul>
     </footer>
   </div>
 </div>

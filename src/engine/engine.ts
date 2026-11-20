@@ -2,10 +2,12 @@ import type { Constellation } from '../types';
 import { ease, hash } from '../lib';
 import { prefersReducedMotion, token } from '../styles';
 import { CONFIG } from './config';
-import { drawCon } from './draw';
+import { drawCon, zoomSize } from './draw';
 import { makeCon } from './layout';
 import type { Camera, Con, PickTarget, Point, StarNode } from './model';
 import { sprites, type Sprites } from './sprites';
+
+const TAU = Math.PI * 2;
 
 export interface FrameStats {
   /** Stars drawn this frame, across the live constellation and its memories. */
@@ -138,7 +140,7 @@ export class Engine {
     this.tgt.y = 0;
     this.cam.x = this.tgt.x;
     this.cam.y = this.tgt.y;
-    this.cam.z = this.tgt.z * 0.82;
+    this.cam.z = this.tgt.z * CONFIG.resetZoom;
     this.events.onChange?.(con);
     this.kick();
   }
@@ -238,7 +240,7 @@ export class Engine {
 
   private fitZ(): number {
     const pw = this.W > CONFIG.wideScreen ? CONFIG.panelWidth : 0;
-    return Math.max(CONFIG.fitMin, Math.min(CONFIG.fitMax, Math.min(this.W - pw - 60, this.H - 150) / 800));
+    return Math.max(CONFIG.fitMin, Math.min(CONFIG.fitMax, Math.min(this.W - pw - CONFIG.fitMarginX, this.H - CONFIG.fitMarginY) / CONFIG.fitSpan));
   }
 
   private focusOffset(): number {
@@ -249,17 +251,18 @@ export class Engine {
     if (!this.running) return;
     const { ctx, cam, tgt, reduce, W, H, sp, colors } = this;
     const cur = this.current;
-    const dt = Math.min(64, now - (this.last || now));
+    const dt = Math.min(CONFIG.maxFrameMs, now - (this.last || now));
     this.last = now;
     const k = reduce ? 1 : 1 - Math.exp(-dt * CONFIG.cameraEase);
     cam.x += (tgt.x - cam.x) * k;
     cam.y += (tgt.y - cam.y) * k;
     cam.z += (tgt.z - cam.z) * k;
     ctx.clearRect(0, 0, W, H);
-    const px = -((cam.x * 0.12) % 512);
-    const py = -((cam.y * 0.12) % 512);
-    ctx.globalAlpha = 0.9;
-    for (let gx = px - 512; gx < W; gx += 512) for (let gy = py - 512; gy < H; gy += 512) ctx.drawImage(sp.dust, gx, gy);
+    const tile = CONFIG.dustTile;
+    const px = -((cam.x * CONFIG.dustParallax) % tile);
+    const py = -((cam.y * CONFIG.dustParallax) % tile);
+    ctx.globalAlpha = CONFIG.dustAlpha;
+    for (let gx = px - tile; gx < W; gx += tile) for (let gy = py - tile; gy < H; gy += tile) ctx.drawImage(sp.dust, gx, gy);
     ctx.globalAlpha = 1;
 
     // memories slide away and shrink
@@ -274,20 +277,20 @@ export class Engine {
         if (p >= 1) c.gm = null;
       }
     }
-    this.cons = this.cons.filter((c) => !(c.gone && c.dim < 0.02));
+    this.cons = this.cons.filter((c) => !(c.gone && c.dim < CONFIG.goneCutoff));
     let total = 0;
     const live = this.cons.filter((c) => !c.gone);
     for (const c of live) if (c !== cur) total += drawCon(ctx, c, cam, now, W, H, { pulses: 0 }, sp, reduce);
 
     // the trail you left, from memory to memory to here
     ctx.globalCompositeOperation = 'lighter';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([2, 7]);
+    ctx.lineWidth = CONFIG.trailWidth;
+    ctx.setLineDash(CONFIG.trailDash);
     for (let i = 1; i < live.length; i++) {
       const A = live[i - 1];
       const B = live[i];
       if (!A || !B) continue;
-      ctx.strokeStyle = 'rgba(' + colors.trail + ',' + Math.min(0.55, A.dim + 0.2) + ')';
+      ctx.strokeStyle = 'rgba(' + colors.trail + ',' + Math.min(CONFIG.trailAlphaMax, A.dim + CONFIG.trailAlphaBoost) + ')';
       ctx.beginPath();
       ctx.moveTo(A.cx, A.cy);
       ctx.lineTo(W / 2 + (B.x - cam.x) * cam.z, H / 2 + (B.y - cam.y) * cam.z);
@@ -301,13 +304,13 @@ export class Engine {
     // marker around one star, used for the race target
     if (this.markerTitle && cur) {
       for (const n of cur.nodes) {
-        if (n.title === this.markerTitle && n.a > 0.5 && n.on) {
-          const rr = 13 + (reduce ? 0 : Math.sin(now * 0.005) * 3);
+        if (n.title === this.markerTitle && n.a > CONFIG.pickMinGrow && n.on) {
+          const rr = CONFIG.markerRadius + (reduce ? 0 : Math.sin(now * CONFIG.markerPulseSpeed) * CONFIG.markerPulse);
           ctx.strokeStyle = 'rgb(' + colors.white + ')';
-          ctx.lineWidth = 1.6;
-          ctx.setLineDash([3, 3]);
+          ctx.lineWidth = CONFIG.markerWidth;
+          ctx.setLineDash(CONFIG.markerDash);
           ctx.beginPath();
-          ctx.arc(n.sx, n.sy, rr, 0, 6.3);
+          ctx.arc(n.sx, n.sy, rr, 0, TAU);
           ctx.stroke();
           ctx.setLineDash([]);
           ctx.lineWidth = 1;
@@ -317,27 +320,28 @@ export class Engine {
 
     // titles
     const boxes: [number, number, number, number][] = [];
+    const gap = CONFIG.labelSpacing;
     let placed = 0;
     ctx.textAlign = 'center';
     for (const c of live) {
       const on = c === cur;
-      const zz = Math.max(0.55, Math.min(2.2, Math.sqrt(cam.z * c.sc)));
+      const zz = zoomSize(cam.z * c.sc);
       ctx.font = on ? CONFIG.fontCentre : CONFIG.fontMemory;
-      ctx.fillStyle = on ? colors.title : 'rgba(' + colors.trail + ',' + Math.min(0.9, c.dim + 0.35) + ')';
-      if (on) ctx.globalAlpha = reduce ? 1 : ease((now - c.born) / 500);
-      const y = c.cy + (on ? 46 : 26) * zz;
+      ctx.fillStyle = on ? colors.title : 'rgba(' + colors.trail + ',' + Math.min(CONFIG.memoryTitleAlphaMax, c.dim + CONFIG.memoryTitleAlphaBoost) + ')';
+      if (on) ctx.globalAlpha = reduce ? 1 : ease((now - c.born) / CONFIG.titleFadeMs);
+      const y = c.cy + (on ? CONFIG.titleOffset : CONFIG.memoryTitleOffset) * zz;
       ctx.fillText(c.title, c.cx, y);
       ctx.globalAlpha = 1;
       const tw = ctx.measureText(c.title).width;
-      boxes.push([c.cx - tw / 2 - 4, y - 18, tw + 8, 24]);
+      boxes.push([c.cx - tw / 2 - CONFIG.titleBoxPad, y - CONFIG.titleBoxRise, tw + CONFIG.titleBoxPad * 2, CONFIG.titleBoxHeight]);
     }
     ctx.textAlign = 'left';
     if (cur) {
       for (let j0 = 0; j0 < cur.nodes.length && placed < CONFIG.maxLabels; j0++) {
         const n = cur.nodes[j0];
-        if (!n || !n.on || n.a < 0.9 || n === this.hover) continue;
-        const big = n.rank <= 2;
-        if (!big && cam.z < 1.15 && n.rank > 3) continue;
+        if (!n || !n.on || n.a < CONFIG.labelMinGrow || n === this.hover) continue;
+        const big = n.rank <= CONFIG.labelStrongRank;
+        if (!big && cam.z < CONFIG.labelFarZoom && n.rank > CONFIG.labelFarRank) continue;
         ctx.font = big ? CONFIG.fontStrong : CONFIG.fontSoft;
         let bw = big ? n.wb : n.ws;
         if (bw === undefined) {
@@ -345,33 +349,33 @@ export class Engine {
           if (big) n.wb = bw;
           else n.ws = bw;
         }
-        const bx = n.sx + (CONFIG.size[n.rank] ?? 0) * 0.9 + 5;
-        const by = n.sy - 8;
-        if (bx + bw > W - 6) continue;
+        const bx = n.sx + (CONFIG.size[n.rank] ?? 0) * CONFIG.labelOffset + CONFIG.labelGap;
+        const by = n.sy - CONFIG.labelRise;
+        if (bx + bw > W - CONFIG.labelEdge) continue;
         let hit = false;
         for (const b of boxes) {
-          if (!(bx > b[0] + b[2] + 4 || bx + bw + 4 < b[0] || by > b[1] + b[3] || by + 15 < b[1])) {
+          if (!(bx > b[0] + b[2] + gap || bx + bw + gap < b[0] || by > b[1] + b[3] || by + CONFIG.labelHeight < b[1])) {
             hit = true;
             break;
           }
         }
         if (hit) continue;
-        boxes.push([bx, by, bw, 15]);
+        boxes.push([bx, by, bw, CONFIG.labelHeight]);
         placed++;
         ctx.fillStyle = this.visited.has(n.title) ? colors.visited : big ? colors.strong : colors.soft;
-        ctx.fillText(n.title, bx, n.sy + 4);
+        ctx.fillText(n.title, bx, n.sy + CONFIG.labelBaseline);
       }
     }
     const hover = this.hover;
     if (hover && hover.on) {
-      ctx.strokeStyle = 'rgba(' + colors.white + ',.8)';
+      ctx.strokeStyle = 'rgba(' + colors.white + ',' + CONFIG.hoverRingAlpha + ')';
       ctx.beginPath();
-      ctx.arc(hover.sx, hover.sy, (CONFIG.size[hover.rank] ?? 0) + 6, 0, 6.3);
+      ctx.arc(hover.sx, hover.sy, (CONFIG.size[hover.rank] ?? 0) + CONFIG.hoverRingGap, 0, TAU);
       ctx.stroke();
     }
     this.events.onFrame?.({ stars: total, memories: live.length - 1 }, now);
-    const settled = Math.abs(tgt.x - cam.x) + Math.abs(tgt.y - cam.y) < 0.05 && Math.abs(tgt.z - cam.z) < 0.0005;
-    if (reduce && settled && !this.cons.some((c) => c.gm || Math.abs(c.dim - c.dimT) > 0.01)) {
+    const settled = Math.abs(tgt.x - cam.x) + Math.abs(tgt.y - cam.y) < CONFIG.settlePan && Math.abs(tgt.z - cam.z) < CONFIG.settleZoom;
+    if (reduce && settled && !this.cons.some((c) => c.gm || Math.abs(c.dim - c.dimT) > CONFIG.settleDim)) {
       this.running = false;
       return;
     }
@@ -391,7 +395,7 @@ export class Engine {
     let best: StarNode | null = null;
     let bd = CONFIG.pickRadius * CONFIG.pickRadius;
     for (const n of cur.nodes) {
-      if (!n.on || n.a < 0.5) continue;
+      if (!n.on || n.a < CONFIG.pickMinGrow) continue;
       const d = (n.sx - p.x) * (n.sx - p.x) + (n.sy - p.y) * (n.sy - p.y);
       if (d < bd) {
         bd = d;
@@ -442,7 +446,7 @@ export class Engine {
           const dd = Math.hypot(A.x - B.x, A.y - B.y);
           if (this.pinch) this.zoomAt({ x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, dd / this.pinch);
           this.pinch = dd;
-          this.moved = 99;
+          this.moved = CONFIG.clickSlop;
         }
         return;
       }
