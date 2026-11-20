@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { SampleProvider } from '../../src/data';
 import { Connect, chainBetween, connectHtml, type ConnectHost, type ConnectState } from '../../src/modes/connect';
-import { DAILY_POOL, bestDaily, dailyPair, dayLabel, dayOf, saveDaily } from '../../src/modes/daily';
+import { DAILY_POOL, bestDaily, dailyPair, dayLabel, dayOf, played, recent, resultGrid, saveDaily, shareText, streak } from '../../src/modes/daily';
 import { failureOf } from '../../src/modes/failure';
 import { Graph, graphOf, route } from '../../src/modes/graph';
 import { closest, suggestNext } from '../../src/modes/panel';
-import { PAR_BUDGET, beginRace, verdict, hudHtml, par, randomPair, stepRace } from '../../src/modes/race';
+import { PAR_BUDGET, beginRace, verdict, hudHtml, par, solvePar, randomPair, stepRace } from '../../src/modes/race';
 import { safeUrl, summaryHtml } from '../../src/modes/summary';
 import type { DataProvider } from '../../src/types';
 
@@ -264,6 +264,63 @@ describe('the daily race', () => {
     expect(saveDaily(day, { clicks: 3, time: 1 }, undefined)).toEqual({ clicks: 3, time: 1 });
   });
 
+  it('has a hard pair that is stable, differs from the normal one and joins two subjects', () => {
+    const group = (t: string): number => DAILY_POOL.findIndex((g) => g.includes(t));
+    expect(dailyPair(day, true)).toEqual(dailyPair(day, true));
+    for (let i = 0; i < 400; i++) {
+      const normal = dailyPair(day + i);
+      const hard = dailyPair(day + i, true);
+      expect(hard.hard).toBe(true);
+      expect(hard.start + '|' + hard.target).not.toBe(normal.start + '|' + normal.target);
+      expect(group(hard.start)).not.toBe(group(hard.target));
+    }
+  });
+
+  it('keeps the two versions apart in storage and counts either for the streak and calendar', () => {
+    const data = new Map<string, string>();
+    const store = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v) };
+    expect(streak(day, store)).toBe(0);
+    saveDaily(day - 1, { clicks: 4, time: 1, par: 3 }, store);
+    saveDaily(day - 2, { clicks: 4, time: 1 }, store, true);
+    expect(bestDaily(day - 2, store)).toBeNull();
+    expect(bestDaily(day - 1, store)).toEqual({ clicks: 4, time: 1, par: 3 });
+    expect(played(day - 2, store)).toBe(true);
+    expect(streak(day, store)).toBe(2); // today not finished yet: counts back from yesterday
+    saveDaily(day, { clicks: 3, time: 1 }, store);
+    expect(streak(day, store)).toBe(3);
+    saveDaily(day - 4, { clicks: 3, time: 1 }, store);
+    expect(streak(day, store)).toBe(3); // a gap on day - 3 ends the run
+    const cal = recent(day, 7, store);
+    expect(cal).toEqual([false, false, true, false, true, true, true]);
+    expect(streak(day, undefined)).toBe(0);
+  });
+
+  it('builds a share text with a result grid and no article names', () => {
+    expect(resultGrid(1, 3)).toBe('⭐');
+    expect(resultGrid(3, 3)).toBe('🟦🟦⭐');
+    expect(resultGrid(5, 3)).toBe('🟦🟦🟧🟧⭐');
+    expect(resultGrid(2, 4)).toBe('🟩⭐');
+    expect(resultGrid(4, undefined)).toBe('🟦🟦🟦⭐');
+    expect(resultGrid(30, 3)).toContain('…⭐');
+    const text = shareText(day, true, { clicks: 3, time: 61000, par: 3 }, 'https://astris.example/play?daily=hard');
+    expect(text).toBe('Astris Daily · 20 Nov (hard)\n3 clicks · par 3 · 1:01\n🟦🟦⭐\nhttps://astris.example/play?daily=hard');
+  });
+
+  it('shows the streak, calendar and buttons on a finished daily, and hides the hint on the hard one', () => {
+    const race = beginRace('A', 'Z', 3, 0, day, true);
+    race.hint = 'A secret clue';
+    expect(hudHtml(race)).not.toContain('secret clue');
+    expect(hudHtml(race)).toContain('· hard');
+    expect(hudHtml(race)).toContain('Normal version');
+    stepRace(race, 'Z', 5000);
+    race.streak = 2;
+    race.calendar = [false, true, true];
+    const html = hudHtml(race);
+    expect(html).toContain('2 days in a row');
+    expect(html).toContain("id='share'");
+    expect(html).toContain('2 of the last 3 days finished');
+  });
+
   it('labels its status card and shows the best finish', () => {
     const race = beginRace('A', 'Z', 3, 0, day);
     expect(hudHtml(race)).toContain('Daily constellation · 20 Nov');
@@ -450,5 +507,43 @@ describe('the race card hint', () => {
     expect(hudHtml(race)).not.toContain("class='hint'");
     race.hint = 'A river in <Spain>.';
     expect(hudHtml(race)).toContain("<div class='hint'>A river in &lt;Spain&gt;.</div>");
+  });
+});
+
+describe('solvePar', () => {
+  it('proves par and returns the route on the sample set', async () => {
+    const r = await solvePar(new SampleProvider(), 'Brutalist architecture', 'Jazz');
+    expect(r).toMatchObject({ par: 4, exact: true });
+    expect(r.route).toHaveLength(5);
+    expect(r.route?.[0]).toBe('Brutalist architecture');
+    expect(r.route?.[4]).toBe('Jazz');
+  });
+
+  it('agrees with a full breadth-first search across the sample set', async () => {
+    const titles = SampleProvider.titles;
+    for (let i = 0; i < titles.length; i += 9) {
+      const from = titles[i] ?? '';
+      const to = titles[(i * 5 + 3) % titles.length] ?? '';
+      const truth = await trueDistance(new SampleProvider(), from, to);
+      const r = await solvePar(new SampleProvider(), from, to);
+      if (truth >= 0 && truth <= 6) expect(r.par, from + ' to ' + to).toBe(truth);
+    }
+  });
+
+  it('drops a link the map does not offer and finds the next best chain', async () => {
+    // B lists A but A does not list B, so A to B is a link the solver sees from B's side only.
+    const p = fake({ A: ['C'], B: ['A', 'Z'], C: ['D'], D: ['Z'], Z: ['D'] });
+    const r = await solvePar(p, 'A', 'Z');
+    expect(r.route).toEqual(['A', 'C', 'D', 'Z']);
+    expect(r.par).toBe(3);
+  });
+
+  it('shows a route on the win card', () => {
+    const race = beginRace('A', 'Z', 2, 0);
+    race.route = ['A', 'B', 'Z'];
+    race.done = true;
+    expect(hudHtml(race)).toContain('Shortest route: A → B → Z');
+    race.parExact = false;
+    expect(hudHtml(race)).toContain('par ≤ 2');
   });
 });

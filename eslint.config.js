@@ -19,7 +19,7 @@ export default tseslint.config(
       // A module reaches another module only through its index.ts or the shared contract.
       'no-restricted-imports': [
         'error',
-        { patterns: [{ regex: '^\\.\\./(data|engine|site|modes|comforts|styles|lib)/.+', message: "Import another module through its index.ts, for example '../engine'." }] },
+        { patterns: [{ regex: '^\\.\\./(data|engine|site|modes|comforts|sky|styles|lib)/.+', message: "Import another module through its index.ts, for example '../engine'." }] },
       ],
     },
   },
