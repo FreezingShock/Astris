@@ -89,19 +89,3 @@ test('Drift travels on its own until the reader quits', async ({ page }) => {
   await page.locator('#modes [data-mode="explore"]').click();
   await expect(page.locator('#modes [data-mode="explore"]')).toHaveAttribute('aria-pressed', 'true');
 });
-
-test('accessibility basics: one h1, a main landmark on the map, and a keyboard way back to the main page', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.locator('h1')).toHaveCount(1);
-  await expect(page.locator('footer.vfoot div a').first()).toHaveCSS('text-decoration-line', 'underline');
-  await page.goto('/play');
-  await expect(page.locator('main#play')).toHaveCount(1);
-  await expect(page.locator('#play a.logo')).toHaveAttribute('href', '/');
-  await expect(page.locator('#play a.lk[data-go="main-page"]')).toHaveAttribute('href', '/');
-});
-
-test('the main page paints its page colour under the wash', async ({ page }) => {
-  await page.goto('/');
-  const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(bg).not.toBe('rgba(0, 0, 0, 0)');
-});

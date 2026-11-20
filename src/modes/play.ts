@@ -7,7 +7,8 @@ import { Discovery, Share, Tip, firstLine, initKeyboard } from '../comforts';
 import { Connect, connectHtml, type ConnectState } from './connect';
 import { dailyPair, recent, saveDaily, shareText, streak } from './daily';
 import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
-import { UNREACHABLE_NOTE, failureOf } from './failure';
+import { diagnose } from '../data';
+import { OutageScreen } from './outage';
 import { legendHtml, panelHtml, suggestNext } from './panel';
 import { graphOf, route } from './graph';
 import { NO_RULES, REVEAL_BUDGET, loadRules, refusal, revealText, saveRules, type Rules } from './rules';
@@ -56,6 +57,7 @@ export class Play {
   private driftTimer = 0;
   private driftSeen: string[] = [];
   private toastTimer = 0;
+  private readonly outage: OutageScreen;
   private found: Suggestion[] = [];
   private sel = 0;
   private suggestSeq = 0;
@@ -110,7 +112,7 @@ export class Play {
       provider: this.provider,
       current: () => this.engine.current?.title ?? null,
       open: async (title) => {
-        const data = await this.load(title);
+        const data = await this.load(title, (d) => this.reset(d), false);
         if (data) this.reset(data);
         return data ? data.center.title : null;
       },
@@ -124,6 +126,7 @@ export class Play {
       render: (state) => this.connectCard(state),
       wait: (ms) => new Promise((done) => window.setTimeout(done, ms)),
     });
+    this.outage = new OutageScreen($('outage'), { home: () => $('play').querySelector<HTMLElement>('.logo')?.click(), random: () => void this.surprise() });
     this.bind();
   }
 
@@ -143,7 +146,7 @@ export class Play {
   /** Start over from one article, in Explore unless told otherwise. */
   async open(title: string, explore = true): Promise<void> {
     if (explore) this.setMode('explore');
-    const data = await this.load(title);
+    const data = await this.load(title, (d) => this.reset(d));
     if (data) this.reset(data);
   }
 
@@ -158,10 +161,12 @@ export class Play {
       const why = refusal(race.rules, title, race.target, subject, race.seen, race.revisits);
       if (why) return this.toast(why);
     }
-    const data = await this.load(title);
-    if (!data) return;
-    this.collect(data);
-    this.engine.travel(data);
+    const go = (d: Constellation): void => {
+      this.collect(d);
+      this.engine.travel(d);
+    };
+    const data = await this.load(title, go);
+    if (data) go(data);
   }
 
   /** Travel to a random article, leaving a race if one is running. */
@@ -169,10 +174,14 @@ export class Play {
     const cur = this.engine.current;
     let t: string;
     let n = 0;
-    do {
-      t = await this.provider.random();
-      n++;
-    } while (cur && t === cur.title && n < 20);
+    try {
+      do {
+        t = await this.provider.random();
+        n++;
+      } while (cur && t === cur.title && n < 20);
+    } catch (err) {
+      return this.report(err, () => this.surprise());
+    }
     if (this.mode !== 'explore') this.setMode('explore');
     if (cur) {
       this.clearSearch();
@@ -185,7 +194,7 @@ export class Play {
     const seq = ++this.raceSeq;
     this.picking = false;
     this.setMode(day === undefined ? 'race' : 'daily');
-    const data = await this.load(start);
+    const data = await this.load(start, () => this.startRace(start, target, knownPar, day, hard, rules));
     if (seq !== this.raceSeq) return;
     if (!data) {
       if (!this.race) this.setMode('explore');
@@ -271,10 +280,10 @@ export class Play {
     try {
       const pair = await this.pair();
       if (seq === this.raceSeq) await this.startRace(pair.start, pair.target, pair.par);
-    } catch {
+    } catch (err) {
       if (seq !== this.raceSeq) return;
       this.setMode('explore');
-      this.toast('Could not pick a race just now. Try again.');
+      await this.report(err, () => this.newRace());
     }
   }
 
@@ -376,19 +385,50 @@ export class Play {
 
   /** Tell the reader an article could not be found. */
   missing(query: string): void {
-    this.toast('No article called “' + query + '” ' + this.copy.missing + '.');
+    this.outage.show('missing', { query, keep: this.engine.current !== null });
   }
 
-  /** Fetch a constellation. Only the latest request wins; a failed one shows a note and returns null. */
-  private async load(title: string): Promise<Constellation | null> {
+  /**
+   * Show the screen that matches why Wikipedia could not be reached, with `retry` to run again by itself.
+   * A cancelled request says nothing; a missing article gets its own screen without a retry.
+   */
+  async report(err: unknown, retry: () => Promise<void>, query = '', screenForMissing = true): Promise<void> {
+    const why = await diagnose(err);
+    if (why === 'cancelled') return;
+    if (why === 'missing') return screenForMissing ? this.missing(query) : this.toast('No article called “' + query + '” ' + this.copy.missing + '.');
+    this.outage.show(why, { retry, keep: this.engine.current !== null });
+  }
+
+  /** Put the outage screen away, for example once a request has worked. */
+  clearOutage(): void {
+    if (this.outage.open) this.outage.hide();
+  }
+
+  /**
+   * Fetch a constellation. Only the latest request wins; a failure shows its screen and returns null.
+   * When the screen's own retry gets the data later, `then` finishes the job the caller would have done.
+   */
+  private async load(title: string, then?: (data: Constellation) => void | Promise<void>, screenForMissing = true): Promise<Constellation | null> {
     const seq = ++this.seq;
-    try {
+    const fetchIt = async (): Promise<Constellation | null> => {
       const data = await this.provider.constellation(title);
+      this.clearOutage();
       return seq === this.seq ? data : null;
+    };
+    try {
+      return await fetchIt();
     } catch (err) {
-      const why = failureOf(err);
-      if (seq === this.seq && why === 'missing') this.missing(title);
-      else if (seq === this.seq && why === 'unreachable') this.toast(UNREACHABLE_NOTE);
+      if (seq === this.seq) {
+        await this.report(
+          err,
+          async () => {
+            const data = await fetchIt();
+            if (data) await then?.(data);
+          },
+          title,
+          screenForMissing,
+        );
+      }
       return null;
     }
   }
