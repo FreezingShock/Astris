@@ -12,6 +12,7 @@ test('a race can be finished, run again and replaced with a new one', async ({ p
   await expect(hud).toContainText('Arrived at Jazz');
   await expect(hud).toContainText('1 click');
   await expect(hud).toHaveClass(/win/);
+  await expect(hud).toContainText('Shortest route: Brutalist architecture →');
 
   await hud.locator('#retry').click();
   await expect(hud).toContainText('Brutalist architecture → Jazz');
