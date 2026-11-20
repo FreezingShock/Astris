@@ -15,6 +15,7 @@
 import type { ArticleSummary, Constellation, DataProvider, Star, SubjectId, Suggestion } from '../types';
 import { Http, HttpError, type HttpOptions } from './http';
 import { MAX_STARS, rankOf } from './rank';
+import type { LinkSource, Links } from './solver';
 import { subjectOf } from './subjects';
 
 const ACTION = 'https://en.wikipedia.org/w/api.php';
@@ -90,7 +91,7 @@ export function lengthBonus(bytes: number): number {
   return Math.min(4, (Math.log10(1 + Math.max(0, bytes) / 1000) / 2.5) * 4);
 }
 
-export class WikipediaProvider implements DataProvider {
+export class WikipediaProvider implements DataProvider, LinkSource {
   private readonly http: Http;
   /** Subjects already shown, so an article keeps its colour as a star and as a centre. */
   private readonly subjects = new Map<string, SubjectId>();
@@ -183,6 +184,30 @@ export class WikipediaProvider implements DataProvider {
       if (err instanceof ArticleNotFoundError) return [];
       throw err;
     }
+  }
+
+  /**
+   * Every article one link away in either direction, with no ranking or star cap: about one to four requests,
+   * against about seven for neighbours(). This is what the par solver reads. `complete` is false when a list
+   * ran past the page cap.
+   */
+  async links(title: string, signal?: AbortSignal): Promise<Links> {
+    const read = async (params: Record<string, string>): Promise<{ titles: string[]; complete: boolean }> => {
+      const titles: string[] = [];
+      let more: Record<string, string> = {};
+      for (let i = 0; i < MAX_PAGES; i++) {
+        const reply = await this.query({ ...params, ...more }, signal);
+        for (const p of reply.query?.pages ?? []) if (!p.missing && !p.invalid && (p.ns ?? 0) === 0 && !NOISE.has(p.title)) titles.push(p.title);
+        if (!reply.continue) return { titles, complete: true };
+        more = reply.continue;
+      }
+      return { titles, complete: false };
+    };
+    const [out, into] = await Promise.all([
+      read({ generator: 'links', titles: title, redirects: '1', gplnamespace: '0', gpllimit: 'max' }),
+      read({ generator: 'linkshere', titles: title, glhnamespace: '0', glhshow: '!redirect', glhlimit: 'max' }),
+    ]);
+    return { titles: [...new Set(out.titles.concat(into.titles))].filter((t) => t !== title), complete: out.complete && into.complete };
   }
 
   private async query(params: Record<string, string>, signal?: AbortSignal): Promise<Reply> {

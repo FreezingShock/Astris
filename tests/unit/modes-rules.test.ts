@@ -22,14 +22,14 @@ describe('refusal', () => {
 
 describe('race with rules', () => {
   it('counts revisits as clicks pass through seen articles', () => {
-    const race = beginRace('A', 'Z', 3, 0, undefined, { ...NO_RULES, backtracks: true });
+    const race = beginRace('A', 'Z', 3, 0, undefined, false, { ...NO_RULES, backtracks: true });
     stepRace(race, 'B', 1);
     stepRace(race, 'A', 2);
     expect(race.revisits).toBe(1);
     expect(race.clicks).toBe(2);
   });
   it('counts down in Blitz and ends the race when the clock runs out', () => {
-    const race = beginRace('A', 'Z', 3, 0, undefined, { ...NO_RULES, blitz: true });
+    const race = beginRace('A', 'Z', 3, 0, undefined, false, { ...NO_RULES, blitz: true });
     expect(secondsLeft(race.rules, 0)).toBe(BLITZ_SECONDS);
     expect(clockText(race, 30_000)).toBe('01:00');
     expect(expire(race, 30_000)).toBe(false);

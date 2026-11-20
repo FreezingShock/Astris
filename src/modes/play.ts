@@ -2,15 +2,16 @@ import type { ArticleSummary, Constellation, DataProvider, Suggestion } from '..
 import { esc } from '../lib';
 import { replay, subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
+import { Atlas, Collection } from '../sky';
 import { Discovery, Share, Tip, firstLine, initKeyboard } from '../comforts';
 import { Connect, connectHtml, type ConnectState } from './connect';
-import { dailyPair, saveDaily } from './daily';
+import { dailyPair, recent, saveDaily, shareText, streak } from './daily';
 import { DRIFT_HTML, DRIFT_MS, nextStop } from './drift';
 import { UNREACHABLE_NOTE, failureOf } from './failure';
 import { legendHtml, panelHtml, suggestNext } from './panel';
 import { graphOf, route } from './graph';
 import { NO_RULES, REVEAL_BUDGET, loadRules, refusal, revealText, saveRules, type Rules } from './rules';
-import { PAR_BEAM, PAR_DEPTH, PICKING_HTML, beginRace, clockText, expire, hudHtml, par, randomPair, stepRace, type Pair, type Race } from './race';
+import { PAR_BEAM, PAR_DEPTH, PICKING_HTML, beginRace, clockText, expire, hudHtml, solvePar, randomPair, stepRace, type Pair, type Race } from './race';
 
 export type Mode = 'explore' | 'race' | 'daily' | 'connect' | 'drift';
 
@@ -47,6 +48,8 @@ export class Play {
   private ahead: Promise<Pair> | null = null;
   private readonly connect: Connect;
   private readonly discovery = new Discovery();
+  private readonly collection = new Collection();
+  private atlas: Atlas | null = null;
   private readonly tip: Tip;
   private readonly share: Share;
   private seq = 0;
@@ -133,6 +136,7 @@ export class Play {
 
   /** The map route closed. */
   leave(): void {
+    this.atlas?.close(false);
     this.engine.disable();
   }
 
@@ -156,7 +160,7 @@ export class Play {
     }
     const data = await this.load(title);
     if (!data) return;
-    this.discovery.note(data);
+    this.collect(data);
     this.engine.travel(data);
   }
 
@@ -177,7 +181,7 @@ export class Play {
   }
 
   /** Start a race between two articles. Par is searched for in the background unless it is already known. */
-  async startRace(start: string, target: string, knownPar?: number, day?: number, rules: Rules = day === undefined ? loadRules() : NO_RULES): Promise<void> {
+  async startRace(start: string, target: string, knownPar?: number, day?: number, hard = false, rules: Rules = day === undefined ? loadRules() : NO_RULES): Promise<void> {
     const seq = ++this.raceSeq;
     this.picking = false;
     this.setMode(day === undefined ? 'race' : 'daily');
@@ -188,7 +192,7 @@ export class Play {
       return;
     }
     // The provider follows redirects, so race on the titles it actually uses.
-    const race = beginRace(data.center.title, target, knownPar ?? null, performance.now(), day, rules);
+    const race = beginRace(data.center.title, target, knownPar ?? null, performance.now(), day, hard, rules);
     this.race = race;
     this.engine.markerTitle = target;
     this.reset(data);
@@ -205,10 +209,13 @@ export class Play {
       },
       () => undefined,
     );
-    if (knownPar !== undefined) return;
-    const found = await par(this.provider, race.start, target);
+    const found = await solvePar(this.provider, race.start, target);
     if (this.race !== race) return;
-    race.par = found;
+    if (found.par >= 0 || knownPar === undefined) {
+      race.par = found.par;
+      race.parExact = found.exact;
+    }
+    if (found.route) race.route = found.route;
     this.hud();
   }
 
@@ -220,9 +227,9 @@ export class Play {
   }
 
   /** Start today's race: one pair a day, the same for every visitor. */
-  async startDaily(): Promise<void> {
-    const pair = dailyPair();
-    await this.startRace(pair.start, pair.target, undefined, pair.day);
+  async startDaily(hard = false): Promise<void> {
+    const pair = dailyPair(undefined, hard);
+    await this.startRace(pair.start, pair.target, undefined, pair.day, hard);
   }
 
   /** A random pair: the one picked ahead if there is one, otherwise a fresh pick. */
@@ -277,7 +284,7 @@ export class Play {
     if (!race || race.day !== undefined) return;
     const rules = { ...race.rules, [rule]: !race.rules[rule] };
     saveRules(rules);
-    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, undefined, rules);
+    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, undefined, false, rules);
   }
 
   /** Reveal: spend one use to learn how far the target is from here and the first step to take. */
@@ -297,11 +304,23 @@ export class Play {
     this.hud();
   }
 
+  /** Copy the finished daily's result grid, which names neither article, to the clipboard. */
+  async shareDaily(): Promise<void> {
+    const race = this.race;
+    if (!race?.done || race.day === undefined || !race.best) return;
+    const text = shareText(race.day, race.hard === true, race.best, location.origin + '/play?daily=' + (race.hard ? 'hard' : '1'));
+    const copied = await navigator.clipboard.writeText(text).then(
+      () => true,
+      () => false,
+    );
+    this.toast(copied ? 'Result copied. Paste it anywhere.' : 'Could not reach the clipboard.');
+  }
+
   /** Run the current race again from its start. */
   async retryRace(): Promise<void> {
     const race = this.race;
     if (!race) return this.newRace();
-    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, race.day, race.rules);
+    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, race.day, race.hard, race.rules);
   }
 
   /** Drift: the map travels to a neighbouring article every few seconds until the reader acts. */
@@ -374,8 +393,19 @@ export class Play {
     }
   }
 
-  private reset(data: Constellation): void {
+  /** Count the constellation as discovered and add its centre to the sky map. */
+  private collect(data: Constellation): void {
     this.discovery.note(data);
+    const r = this.collection.visit(data.center.title, data.center.subject);
+    const said: string[] = [];
+    if (r.lit) said.push('New region lit: ' + r.lit);
+    for (const a of r.unlocked) said.push('Achievement: ' + a.name);
+    if (said.length) this.toast(said.join(' · '));
+    this.atlas?.refresh();
+  }
+
+  private reset(data: Constellation): void {
+    this.collect(data);
     this.engine.reset(data);
   }
 
@@ -410,7 +440,12 @@ export class Play {
     if (!race || race.done) return;
     if (stepRace(race, title, now)) {
       this.engine.markerTitle = null;
-      if (race.day !== undefined) race.best = saveDaily(race.day, { clicks: race.clicks, time: race.time });
+      if (race.day !== undefined) {
+        const hard = race.hard === true;
+        race.best = saveDaily(race.day, { clicks: race.clicks, time: race.time, ...(race.par !== null && race.par > 0 ? { par: race.par } : {}) }, undefined, hard);
+        race.streak = streak(race.day);
+        race.calendar = recent(race.day);
+      }
       this.prepare();
     }
     this.hud();
@@ -545,7 +580,7 @@ export class Play {
       const hit = li ? this.found[Number(li.dataset.i)] : undefined;
       if (hit) this.choose(hit.title);
     });
-    initKeyboard(gq, this.isOpen, { map: engine, go: (title) => void this.navigate(title) });
+    initKeyboard(gq, () => this.isOpen() && !this.atlas?.isOpen, { map: engine, go: (title) => void this.navigate(title) });
 
     document.addEventListener('keydown', (e) => {
       const t = e.target;
@@ -555,6 +590,9 @@ export class Play {
         void this.newChain();
       }
     });
+    const atlas = new Atlas({ collection: this.collection, open: (title) => void this.open(title) });
+    this.atlas = atlas;
+    $('skyBtn').addEventListener('click', () => (atlas.isOpen ? atlas.close() : atlas.open()));
     $('surprise').addEventListener('click', () => void this.surprise());
     $('zin').addEventListener('click', () => engine.zoomBy(1.4));
     $('zout').addEventListener('click', () => engine.zoomBy(1 / 1.4));
@@ -600,6 +638,8 @@ export class Play {
       else if (id === 'reveal') void this.reveal();
       else if (id === 'again') void this.newRace();
       else if (id === 'retry') void this.retryRace();
+      else if (id === 'dtoggle') void this.startDaily(!this.race?.hard);
+      else if (id === 'share') void this.shareDaily();
       else if (id === 'quit') this.setMode('explore');
     });
 
