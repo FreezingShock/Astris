@@ -155,14 +155,18 @@ export class Site {
       const typed = $<HTMLInputElement>('vq').value.trim();
       this.go('play');
       if (!typed) return;
-      void this.provider.suggest(typed).then((found) => {
-        const hit = found[0];
-        if (hit) void this.play.open(hit.title);
-        else {
-          this.play.setMode('explore');
-          this.play.missing(typed);
-        }
-      });
+      void this.provider.suggest(typed).then(
+        (found) => {
+          const hit = found[0];
+          if (hit) void this.play.open(hit.title);
+          else {
+            this.play.setMode('explore');
+            this.play.missing(typed);
+          }
+        },
+        // A failed search is not a missing article.
+        () => this.play.toast('Could not reach Wikipedia just now. Try again in a moment.'),
+      );
     });
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && !this.onMap) this.miniTick();
