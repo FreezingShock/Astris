@@ -1,5 +1,5 @@
 import type { DataProvider } from '../types';
-import { prefersReducedMotion, subjectDotsHtml, subjectKeyHtml } from '../styles';
+import { jumpTo, subjectDotsHtml, subjectKeyHtml } from '../styles';
 import { MiniMap } from '../engine';
 import { dailyPair, par, type Play } from '../modes';
 import { articleOf, dispatchPlayLink, isRouteName, pathOf, racePairOf, routeOf, type RouteName } from './router';
@@ -134,7 +134,7 @@ export class Site {
       const d = a.dataset;
       if (d.scroll) {
         e.preventDefault();
-        document.getElementById(d.scroll)?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+        jumpTo(document.getElementById(d.scroll));
         return;
       }
       e.preventDefault();
