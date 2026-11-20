@@ -3,11 +3,12 @@ import { clock, esc } from '../lib';
 import { subjectRgb } from '../styles';
 import { Engine, type Con } from '../engine';
 import { Discovery, Tip, initKeyboard } from '../comforts';
+import { dailyPair, saveDaily } from './daily';
 import { UNREACHABLE_NOTE, failureOf } from './failure';
 import { legendHtml, panelHtml } from './panel';
 import { PICKING_HTML, beginRace, hudHtml, par, randomPair, stepRace, type Race } from './race';
 
-export type Mode = 'explore' | 'race';
+export type Mode = 'explore' | 'race' | 'daily';
 
 /** Wording that depends on where the data comes from. */
 export interface SourceCopy {
@@ -21,7 +22,6 @@ export interface SourceCopy {
 
 const SOON: Record<string, string> = {
   connect: 'Connect two is planned: type two topics and the shortest chain between them lights up.',
-  daily: 'Daily constellation is planned: one pair a day, the same for everyone.',
   drift: 'Drift is planned: the map explores itself, like a screensaver.',
 };
 
@@ -128,26 +128,42 @@ export class Play {
   }
 
   /** Start a race between two articles. Par is searched for in the background unless it is already known. */
-  async startRace(start: string, target: string, knownPar?: number): Promise<void> {
+  async startRace(start: string, target: string, knownPar?: number, day?: number): Promise<void> {
     const seq = ++this.raceSeq;
     this.picking = false;
-    this.setMode('race');
+    this.setMode(day === undefined ? 'race' : 'daily');
     const data = await this.load(start);
     if (seq !== this.raceSeq) return;
     if (!data) {
       if (!this.race) this.setMode('explore');
       return;
     }
-    const race = beginRace(start, target, knownPar ?? null, performance.now());
+    // The provider follows redirects, so race on the titles it actually uses.
+    const race = beginRace(data.center.title, target, knownPar ?? null, performance.now(), day);
     this.race = race;
     this.engine.markerTitle = target;
     this.reset(data);
     this.hud();
+    void this.provider.summary(target).then(
+      (s) => {
+        if (this.race !== race || race.done || !s.title || s.title === race.target) return;
+        race.target = s.title;
+        this.engine.markerTitle = s.title;
+        this.hud();
+      },
+      () => undefined,
+    );
     if (knownPar !== undefined) return;
-    const found = await par(this.provider, start, target);
+    const found = await par(this.provider, race.start, target);
     if (this.race !== race) return;
     race.par = found;
     this.hud();
+  }
+
+  /** Start today's race: one pair a day, the same for every visitor. */
+  async startDaily(): Promise<void> {
+    const pair = dailyPair();
+    await this.startRace(pair.start, pair.target, undefined, pair.day);
   }
 
   /** Start a race between a freshly picked random pair. */
@@ -172,13 +188,13 @@ export class Play {
   async retryRace(): Promise<void> {
     const race = this.race;
     if (!race) return this.newRace();
-    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined);
+    await this.startRace(race.start, race.target, race.par !== null && race.par >= 0 ? race.par : undefined, race.day);
   }
 
   setMode(m: Mode): void {
     this.mode = m;
     document.querySelectorAll<HTMLElement>('#modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
-    if (m !== 'race') {
+    if (m === 'explore') {
       this.raceSeq++;
       this.picking = false;
       this.race = null;
@@ -246,7 +262,10 @@ export class Play {
   private travelled(title: string, now: number): void {
     const race = this.race;
     if (!race || race.done) return;
-    if (stepRace(race, title, now)) this.engine.markerTitle = null;
+    if (stepRace(race, title, now)) {
+      this.engine.markerTitle = null;
+      if (race.day !== undefined) race.best = saveDaily(race.day, { clicks: race.clicks, time: race.time });
+    }
     this.hud();
   }
 
@@ -364,6 +383,7 @@ export class Play {
       const soon = SOON[m];
       if (soon) this.toast(soon);
       else if (m === 'race') void this.newRace();
+      else if (m === 'daily') void this.startDaily();
       else this.setMode('explore');
     });
     $('hud').addEventListener('click', (e) => {

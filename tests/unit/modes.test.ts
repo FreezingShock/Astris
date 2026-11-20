@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SampleProvider } from '../../src/data';
+import { DAILY_POOL, bestDaily, dailyPair, dayLabel, dayOf, saveDaily } from '../../src/modes/daily';
 import { failureOf } from '../../src/modes/failure';
 import { Graph, graphOf, route } from '../../src/modes/graph';
 import { PAR_BUDGET, beginRace, hudHtml, par, randomPair, stepRace } from '../../src/modes/race';
@@ -205,5 +206,69 @@ describe('a failed request', () => {
     expect(failureOf(new TypeError('Failed to fetch'))).toBe('unreachable');
     expect(failureOf(named('HttpError'))).toBe('unreachable');
     expect(failureOf(named('AbortError'))).toBe('cancelled');
+  });
+});
+
+describe('the daily race', () => {
+  const day = dayOf(Date.UTC(2026, 10, 20, 15));
+
+  it('is the same pair all day for everyone, and changes with the day', () => {
+    expect(dayOf(Date.UTC(2026, 10, 20, 0, 0, 1))).toBe(day);
+    expect(dayOf(Date.UTC(2026, 10, 20, 23, 59, 59))).toBe(day);
+    expect(dayOf(Date.UTC(2026, 10, 21))).toBe(day + 1);
+    expect(dailyPair(day)).toEqual(dailyPair(day));
+    expect(dayLabel(day)).toBe('20 Nov');
+    const year = new Set(Array.from({ length: 365 }, (_, i) => dailyPair(day + i)).map((p) => p.start + '|' + p.target));
+    expect(year.size).toBeGreaterThan(300);
+  });
+
+  it('always joins two different subjects with articles the sample set has', () => {
+    const group = (t: string): number => DAILY_POOL.findIndex((g) => g.includes(t));
+    for (let i = 0; i < 400; i++) {
+      const pair = dailyPair(day + i);
+      expect(SampleProvider.isReal(pair.start), pair.start).toBe(true);
+      expect(SampleProvider.isReal(pair.target), pair.target).toBe(true);
+      expect(group(pair.start)).not.toBe(group(pair.target));
+    }
+    const all = DAILY_POOL.flat();
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it('has a chain on the sample set every day for a year', async () => {
+    const provider = new SampleProvider();
+    for (let i = 0; i < 365; i++) {
+      const pair = dailyPair(day + i);
+      expect(await trueDistance(provider, pair.start, pair.target), pair.start + ' to ' + pair.target).toBeGreaterThan(1);
+    }
+  });
+
+  it('keeps the best finish for the day and survives blocked storage', () => {
+    const data = new Map<string, string>();
+    const store = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v) };
+    expect(bestDaily(day, store)).toBeNull();
+    expect(saveDaily(day, { clicks: 5, time: 9000 }, store)).toEqual({ clicks: 5, time: 9000 });
+    expect(saveDaily(day, { clicks: 6, time: 1000 }, store)).toEqual({ clicks: 5, time: 9000 });
+    expect(saveDaily(day, { clicks: 5, time: 4000 }, store)).toEqual({ clicks: 5, time: 4000 });
+    expect(bestDaily(day + 1, store)).toBeNull();
+    data.set('astris:daily:' + day, '{broken');
+    expect(bestDaily(day, store)).toBeNull();
+    const blocked = {
+      getItem: (): string | null => null,
+      setItem: (): void => {
+        throw new Error('blocked');
+      },
+    };
+    expect(saveDaily(day, { clicks: 3, time: 1 }, blocked)).toEqual({ clicks: 3, time: 1 });
+    expect(saveDaily(day, { clicks: 3, time: 1 }, undefined)).toEqual({ clicks: 3, time: 1 });
+  });
+
+  it('labels its status card and shows the best finish', () => {
+    const race = beginRace('A', 'Z', 3, 0, day);
+    expect(hudHtml(race)).toContain('Daily constellation · 20 Nov');
+    expect(hudHtml(race)).toContain("id='retry'>Restart");
+    stepRace(race, 'Z', 61000);
+    race.best = { clicks: 1, time: 61000 };
+    expect(hudHtml(race)).toContain('your best today 1 click in 01:01');
+    expect(hudHtml(beginRace('A', 'Z', 3, 0))).not.toContain('Daily');
   });
 });

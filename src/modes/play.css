@@ -329,6 +329,13 @@
   font-family: var(--serif);
   font-size: 19px;
 }
+#hud .day {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 #hud .line em {
   font-style: normal;
   color: var(--neb-rose);
@@ -422,4 +429,22 @@
   display: none;
   max-width: min(520px, 90%);
   text-align: center;
+}
+
+/* On a phone the race card sits under the Random article button, clear of the zoom buttons. */
+@media (max-width: 600px) {
+  #play #hud {
+    top: 154px;
+    left: 62px;
+    right: 12px;
+    transform: none;
+    max-width: none;
+    padding: 8px 10px;
+  }
+  #play #hud .line {
+    font-size: 17px;
+  }
+  #play #hud .stats {
+    gap: 4px 12px;
+  }
 }
