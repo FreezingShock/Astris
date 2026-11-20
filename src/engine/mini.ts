@@ -37,15 +37,25 @@ export class MiniMap {
         mini.height = Math.round(r.height * d);
       }
       const now = performance.now();
-      if (!this.con) this.con = makeCon(this.data, 0, 0, now, 200);
+      if (!this.con) this.con = makeCon(this.data, 0, 0, now, CONFIG.miniDelayMs);
       const ctx = this.ctx;
       ctx.setTransform(d, 0, 0, d, 0, 0);
       ctx.clearRect(0, 0, r.width, r.height);
-      drawCon(ctx, this.con, { x: 0, y: 0, z: Math.min(r.width, r.height * 1.5) / 760 }, now, r.width, r.height, { pulses: 5, mini: true }, sprites(), this.reduce);
-      ctx.font = '600 15px Georgia, serif';
+      drawCon(
+        ctx,
+        this.con,
+        { x: 0, y: 0, z: Math.min(r.width, r.height * CONFIG.miniAspect) / CONFIG.miniSpan },
+        now,
+        r.width,
+        r.height,
+        { pulses: CONFIG.miniPulses, mini: true },
+        sprites(),
+        this.reduce,
+      );
+      ctx.font = CONFIG.fontMini;
       ctx.textAlign = 'center';
       ctx.fillStyle = token('--starlight');
-      ctx.fillText(this.data.center.title, r.width / 2, r.height / 2 + 34);
+      ctx.fillText(this.data.center.title, r.width / 2, r.height / 2 + CONFIG.miniTitleOffset);
       if (!this.reduce) this.raf = requestAnimationFrame(tick);
     };
     tick();

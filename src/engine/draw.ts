@@ -11,7 +11,12 @@ export interface DrawOptions {
   mini?: boolean;
 }
 
-const TAU = 6.2832;
+const TAU = Math.PI * 2;
+
+/** How much stars and titles grow with the zoom: its square root, clamped. */
+export function zoomSize(scale: number): number {
+  return Math.max(CONFIG.zoomSizeMin, Math.min(CONFIG.zoomSizeMax, Math.sqrt(scale)));
+}
 
 /** Draw one constellation into any 2D context. Returns the number of stars drawn. */
 export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, now: number, w: number, h: number, opt: DrawOptions, sp: Sprites, reduce: boolean): number {
@@ -20,11 +25,11 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
   const cx = w / 2 + (con.x - cam.x) * z;
   const cy = h / 2 + (con.y - cam.y) * z;
   const g = con.ghost;
-  const zs = Math.max(0.55, Math.min(2.2, Math.sqrt(S)));
-  const gfade = g ? 1 - ease((now - g.t0) / 420) : 1;
+  const zs = zoomSize(S);
+  const gfade = g ? 1 - ease((now - g.t0) / CONFIG.memoryThreadFadeMs) : 1;
   con.cx = cx;
   con.cy = cy;
-  if (con.dim < 0.015 && gfade <= 0) return 0;
+  if (con.dim < CONFIG.dimCutoff && gfade <= 0) return 0;
   ctx.globalCompositeOperation = 'lighter';
   ctx.lineWidth = 1;
 
@@ -34,15 +39,15 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
     if (u > 0 && u < 1) {
       const rr = CONFIG.rMax * ease(u) * S;
       const rgb = subjectRgb(con.subject);
-      ctx.strokeStyle = 'rgba(' + rgb + ',' + (1 - u) * 0.55 + ')';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(' + rgb + ',' + (1 - u) * CONFIG.ringAlpha + ')';
+      ctx.lineWidth = CONFIG.ringWidth;
       ctx.beginPath();
       ctx.arc(cx, cy, rr, 0, TAU);
       ctx.stroke();
-      ctx.strokeStyle = 'rgba(' + rgb + ',' + (1 - u) * 0.07 + ')';
-      ctx.lineWidth = 22 * zs;
+      ctx.strokeStyle = 'rgba(' + rgb + ',' + (1 - u) * CONFIG.ringHaloAlpha + ')';
+      ctx.lineWidth = CONFIG.ringHaloWidth * zs;
       ctx.beginPath();
-      ctx.arc(cx, cy, Math.max(0, rr - 11 * zs), 0, TAU);
+      ctx.arc(cx, cy, Math.max(0, rr - (CONFIG.ringHaloWidth / 2) * zs), 0, TAU);
       ctx.stroke();
       ctx.lineWidth = 1;
     }
@@ -50,8 +55,8 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
 
   // threads, batched by subject and rank
   for (const G of con.groups) {
-    const ta = (CONFIG.threadAlpha[G.rank] ?? 0) * (g ? (G.rank <= 2 ? con.dim : gfade) : con.dim);
-    if (ta < 0.008) continue;
+    const ta = (CONFIG.threadAlpha[G.rank] ?? 0) * (g ? (G.rank <= CONFIG.memoryKeepRank ? con.dim : gfade) : con.dim);
+    if (ta < CONFIG.threadCutoff) continue;
     ctx.strokeStyle = 'rgba(' + subjectRgb(G.subject) + ',' + ta + ')';
     ctx.beginPath();
     for (const o of G.nodes) {
@@ -75,23 +80,24 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
   }
 
   let shown = 0;
+  const m = CONFIG.cullMargin;
   for (const o of con.nodes) {
     let s = reduce ? 1 : spring((now - o.born) / CONFIG.starPopMs);
     let al = con.dim;
     let sx = cx + o.dx * S;
     let sy = cy + o.dy * S;
-    if (g && o.rank > 2) {
+    if (g && o.rank > CONFIG.memoryKeepRank) {
       // dissolving: far stars blow outward and fade, the closest few stay as a faint memory
       const du = reduce ? 1 : ease((now - (g.t0 + o.gd)) / CONFIG.dissolveMs);
       al = 1 - du;
-      if (al <= 0.01) {
+      if (al <= CONFIG.dissolveCutoff) {
         o.a = 0;
         o.on = false;
         continue;
       }
       sx += o.gux * du * CONFIG.dissolveDrift * z;
       sy += o.guy * du * CONFIG.dissolveDrift * z;
-      s *= 1 - du * 0.5;
+      s *= 1 - du * CONFIG.dissolveShrink;
     }
     o.a = s;
     if (s <= 0) {
@@ -101,30 +107,30 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
     shown++;
     o.sx = sx;
     o.sy = sy;
-    if (sx < -30 || sy < -30 || sx > w + 30 || sy > h + 30) {
+    if (sx < -m || sy < -m || sx > w + m || sy > h + m) {
       o.on = false;
       continue;
     }
     o.on = true;
-    const tw = reduce ? 1 : 1 + Math.sin(now * 0.001 * o.sp * 2.2 + o.ph) * 0.16;
-    const d = (CONFIG.size[o.rank] ?? 0) * zs * s * tw * 2.1;
+    const tw = reduce ? 1 : 1 + Math.sin(now * CONFIG.twinkleSpeed * o.sp + o.ph) * CONFIG.twinkleAmount;
+    const d = (CONFIG.size[o.rank] ?? 0) * zs * s * tw * CONFIG.glowScale;
     ctx.globalAlpha = al * (CONFIG.starAlpha[o.rank] ?? 0) * Math.min(1, s);
     ctx.drawImage(sp.glow(o.subject), sx - d, sy - d, d * 2, d * 2);
-    if (o.rank === 1) {
-      const d1 = d * 0.5;
+    if (o.rank <= CONFIG.coreRank) {
+      const d1 = d * CONFIG.coreScale;
       ctx.drawImage(sp.white, sx - d1, sy - d1, d1 * 2, d1 * 2);
     }
   }
 
   // points of light running inward along threads
   if (!reduce && opt.pulses && !g) {
-    if (con.pulses.length < opt.pulses) con.pulses.push({ n: null, t0: now + con.pulses.length * 240 });
+    if (con.pulses.length < opt.pulses) con.pulses.push({ n: null, t0: now + con.pulses.length * CONFIG.pulseStaggerMs });
     for (const pu of con.pulses) {
       const u = (now - pu.t0) / CONFIG.pulseMs;
       if (u < 0) continue;
       if (u >= 1 || !pu.n || !pu.n.a) {
-        pu.n = con.nodes[Math.floor(Math.random() * Math.min(con.nodes.length, 90))] ?? null;
-        pu.t0 = now + Math.random() * 900;
+        pu.n = con.nodes[Math.floor(Math.random() * Math.min(con.nodes.length, CONFIG.pulsePool))] ?? null;
+        pu.t0 = now + Math.random() * CONFIG.pulseRestMs;
         continue;
       }
       const n = pu.n;
@@ -135,16 +141,20 @@ export function drawCon(ctx: CanvasRenderingContext2D, con: Con, cam: Camera, no
       const my = (ay + n.dy) / 2 + (n.dx - ax) * n.bend;
       const X = e * e * n.dx + 2 * e * u * mx + u * u * ax;
       const Y = e * e * n.dy + 2 * e * u * my + u * u * ay;
-      const d2 = 5 * zs;
-      ctx.globalAlpha = Math.sin(u * Math.PI) * 0.9;
+      const d2 = CONFIG.pulseSize * zs;
+      ctx.globalAlpha = Math.sin(u * Math.PI) * CONFIG.pulseAlpha;
       ctx.drawImage(sp.white, cx + X * S - d2, cy + Y * S - d2, d2 * 2, d2 * 2);
     }
   }
 
   // centre star, tinted by its subject
   const cs = reduce ? 1 : spring((now - con.born) / CONFIG.centrePopMs);
-  const cd = (opt.mini ? 20 : 30) * zs * (0.35 + 0.65 * cs) * (reduce ? 1 : 1 + Math.sin(now * 0.0016) * 0.05);
-  ctx.globalAlpha = Math.min(1, con.dim + (g ? 0.25 : 0));
+  const cd =
+    (opt.mini ? CONFIG.centreSizeMini : CONFIG.centreSize) *
+    zs *
+    (CONFIG.centreGrowFrom + (1 - CONFIG.centreGrowFrom) * cs) *
+    (reduce ? 1 : 1 + Math.sin(now * CONFIG.centreBreatheSpeed) * CONFIG.centreBreatheAmount);
+  ctx.globalAlpha = Math.min(1, con.dim + (g ? CONFIG.memoryCentreBoost : 0));
   ctx.drawImage(sp.star(con.subject), cx - cd, cy - cd, cd * 2, cd * 2);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
